@@ -48,12 +48,15 @@ const co2Series = Array.from({ length: 25 }, (_, i) => ({
   c: 500 + Math.sin(i / 2) * 200 + (i === 8 ? 600 : 0) + Math.cos(i) * 80,
 }));
 
-const sensor06Series = Array.from({ length: 30 }, (_, i) => ({
-  t: i,
-  temp: 24 + Math.sin(i / 3) * 1.5,
-  hum: 38 + Math.cos(i / 4) * 4,
-  co2: 700 + Math.sin(i / 2) * 200,
-}));
+const sensor06Detail = Array.from({ length: 25 }, (_, i) => {
+  const hour = (9 + i) % 24;
+  return {
+    t: `${String(hour).padStart(2, "0")}:00`,
+    temp: +(24 + Math.sin(i / 3) * 1.8 + Math.cos(i / 5) * 0.6).toFixed(1),
+    hum: +(38 + Math.cos(i / 4) * 5 + Math.sin(i / 6) * 2).toFixed(1),
+    co2: Math.round(650 + Math.sin(i / 2.2) * 220 + Math.cos(i / 3.4) * 90),
+  };
+});
 
 // Sensor pins on the floor plan (percent positions)
 const sensorPins = [
@@ -83,16 +86,17 @@ const pinTone: Record<string, string> = {
 
 /* ---------- small components ---------- */
 function Sparkline({ data, color }: { data: { x: number; y: number }[]; color: string }) {
+  const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <ResponsiveContainer width="100%" height={42}>
       <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
         <defs>
-          <linearGradient id={`g-${color}`} x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor={color} stopOpacity={0.55} />
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#g-${color})`} />
+        <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#${gid})`} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -385,14 +389,16 @@ function Dashboard() {
 
             <div>
               <div className="text-xs text-muted-foreground mb-2">Últimas 24 horas</div>
-              <div className="h-32">
+              <div className="h-40">
                 <ResponsiveContainer>
-                  <LineChart data={sensor06Series}>
-                    <Line type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="hum" stroke="#38bdf8" strokeWidth={1.5} dot={false} />
-                    <Line type="monotone" dataKey="co2" stroke="#22c55e" strokeWidth={1.5} dot={false} yAxisId="right" />
-                    <YAxis hide /><YAxis yAxisId="right" hide />
-                    <XAxis dataKey="t" hide />
+                  <LineChart data={sensor06Detail} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                    <XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval={2} />
+                    <YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[18, 32]} ticks={[20,25,30]} tickFormatter={(v)=>`${v}°C`} width={30} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[200, 1100]} ticks={[250,500,750,1000]} tickFormatter={(v)=>`${v} ppm`} width={42} />
+                    <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} />
+                    <Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={{ r: 1.5, fill: "#ef4444" }} isAnimationActive={false} />
+                    <Line yAxisId="left" type="monotone" dataKey="hum" stroke="#38bdf8" strokeWidth={1.5} dot={{ r: 1.5, fill: "#38bdf8" }} isAnimationActive={false} />
+                    <Line yAxisId="right" type="monotone" dataKey="co2" stroke="#22c55e" strokeWidth={1.5} dot={{ r: 1.5, fill: "#22c55e" }} isAnimationActive={false} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
