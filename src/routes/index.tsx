@@ -340,38 +340,35 @@ function Dashboard() {
           </div>
 
           {/* Sensor detail */}
-          <div className="glass-strong rounded-2xl p-4 flex flex-col gap-4 min-w-0">
+          <div className="glass-strong rounded-2xl p-4 flex flex-col gap-2.5 min-w-0">
             <div className="flex items-center justify-between">
-              <div className="text-lg font-semibold">Sensor 06</div>
+              <div className="text-base font-semibold">Sensor 06</div>
               <div className="flex items-center gap-1.5 text-xs text-critical">
                 <span className="h-2 w-2 rounded-full bg-critical" /> Crítico
               </div>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-              <div>
+            <div className="flex items-center gap-2 text-xs">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+              <div className="leading-tight">
                 <div>Recepção Central</div>
-                <div className="text-xs text-muted-foreground">Térreo</div>
+                <div className="text-[10px] text-muted-foreground">Térreo</div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1.5 pt-1">
               {[
                 { label: "Temperatura", value: "26,4 °C", color: "#ef4444", seed: 9 },
                 { label: "Umidade", value: "38 %", color: "#38bdf8", seed: 4 },
                 { label: "CO₂", value: "875 ppm", color: "#ef4444", seed: 7 },
               ].map((m) => (
-                <div key={m.label} className="flex items-center gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-muted-foreground">{m.label}</div>
-                    <div className="text-xl font-semibold">{m.value}</div>
-                  </div>
-                  <div className="w-28 shrink-0">
-                    <Sparkline data={spark(m.seed)} color={m.color} />
-                  </div>
+                <div key={m.label} className="grid grid-cols-[1fr_auto_72px] items-center gap-2">
+                  <div className="text-[11px] text-muted-foreground">{m.label}</div>
+                  <div className="text-sm font-semibold tabular-nums">{m.value}</div>
+                  <div className="h-6"><Sparkline data={spark(m.seed)} color={m.color} /></div>
                 </div>
               ))}
             </div>
+
 
             <div className="grid grid-cols-2 gap-y-1.5 text-xs pt-2 border-t border-white/10">
               <span className="text-muted-foreground">Status</span><span className="text-success text-right">Online</span>
@@ -388,8 +385,9 @@ function Dashboard() {
             </div>
 
             <div>
-              <div className="text-xs text-muted-foreground mb-2">Últimas 24 horas</div>
-              <div className="h-40">
+              <div className="text-[11px] text-muted-foreground mb-1">Últimas 24 horas</div>
+              <div className="h-28">
+
                 <ResponsiveContainer>
                   <LineChart data={sensor06Detail} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
                     <XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval={2} />
