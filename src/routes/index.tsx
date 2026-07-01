@@ -46,6 +46,7 @@ import {
   CartesianGrid,
 } from "recharts";
 import floorPlan from "@/assets/floor-plan-heatmap.jpg";
+import sensorAm103 from "@/assets/am103.webp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -648,8 +649,119 @@ function PlantView({ period, setPeriod, layer, setLayer, dashboard, history, set
   return <><Header period={period} setPeriod={setPeriod} updatedAt={dashboard.updatedAt} alarms={dashboard.kpis.activeAlarms} /><DigitalTwinMap sensors={buildHeatmapSensors(period, dashboard, history)} layer={layer} period={period} onLayerChange={setLayer} onSelectSensor={setSelectedSensor} /><ChartsAndInsights series={buildChartSeries(history, period)} dashboard={dashboard} period={period} /></>;
 }
 
+function MetricBlock({ icon: Icon, label, value, unit, color }: { icon: any; label: string; value: string; unit?: string; color: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="h-6 flex items-center justify-center mb-1">
+        <Icon className="h-4 w-4" style={{ color }} />
+      </div>
+      <div className="text-lg font-semibold tabular-nums leading-none">{value}</div>
+      <div className="text-[11px] text-muted-foreground mt-1">{unit}</div>
+    </div>
+  );
+}
+
+function SensorCard({ sensor, index }: { sensor: Sensor; index: number }) {
+  const isAlert = typeof sensor.temperature === "number" && (sensor.temperature < 21.5 || sensor.temperature > 25);
+  const statusTone = isAlert ? "text-warning" : "text-success";
+  const statusLabel = isAlert ? "Atenção" : "Online";
+  return (
+    <article className="group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800/55 to-slate-950/55 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_16px_40px_-28px_rgba(0,0,0,.9)] transition-all duration-300 hover:-translate-y-0.5 hover:border-cyan-400/35 hover:shadow-[0_0_34px_-20px_rgba(56,189,248,.9)]">
+      <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.14),transparent_45%)]" />
+      <div className="relative flex items-start gap-2.5">
+        <div className={`h-7 w-7 rounded-lg grid place-items-center text-xs font-bold shrink-0 border ${isAlert ? "bg-warning/15 border-warning/25 text-warning" : "bg-success/15 border-success/25 text-success"}`}>{String(index + 1).padStart(2, "0")}</div>
+        <div className="relative h-11 w-14 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] grid place-items-center overflow-hidden shadow-[0_0_18px_-10px_rgba(56,189,248,.8)]">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,.16),transparent_60%)]" />
+          <img src={sensorAm103} alt="Sensor Milesight AM103" className="relative h-10 w-12 object-contain drop-shadow-[0_8px_14px_rgba(0,0,0,.55)]" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="font-semibold text-sm truncate">{sensor.sensor_name}</div>
+            <div className={`flex items-center gap-1.5 text-xs shrink-0 ${statusTone}`}><span className={`h-2 w-2 rounded-full ${isAlert ? "bg-warning" : "bg-success"}`} />{statusLabel}</div>
+          </div>
+          <div className="text-xs text-muted-foreground truncate mt-0.5">{sensor.area}</div>
+        </div>
+      </div>
+
+      <div className="relative mt-4 grid grid-cols-4 gap-2 text-center">
+        <MetricBlock icon={Thermometer} label="Temp." value={formatDecimal(sensor.temperature)} unit="°C" color="#fb923c" />
+        <MetricBlock icon={Droplets} label="Umid." value={formatDecimal(sensor.humidity)} unit="%" color="#38bdf8" />
+        <MetricBlock icon={Cloud} label="CO₂" value={formatInt(sensor.co2)} unit="ppm" color="#9db7d7" />
+        <MetricBlock icon={BatteryMedium} label="Bat." value={formatInt(sensor.battery)} unit="%" color="#22c55e" />
+      </div>
+
+      <div className="relative mt-3 border-t border-white/10 pt-3">
+        <div className="flex items-center justify-between text-[11px] mb-1.5">
+          <span className="text-warning font-medium">Temp.</span>
+          <span className="text-info font-medium">Umid.</span>
+          <span className="text-success font-medium">CO₂</span>
+          <span className="text-muted-foreground">24h</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2 h-8">
+          <Sparkline data={spark(index + 1, 18)} color="#f59e0b" />
+          <Sparkline data={spark(index + 3, 18)} color="#38bdf8" />
+          <Sparkline data={spark(index + 6, 18)} color="#22c55e" />
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function SensorsView({ sensors }: { sensors: Sensor[] }) {
-  return <><PageHeader title="Sensores" description="Cadastro operacional dos 15 AM103, status de comunicação e última leitura."><div className="glass rounded-xl px-3 py-2 flex items-center gap-2 text-sm text-muted-foreground"><Search className="h-4 w-4" /> Buscar sensor</div></PageHeader><div className="glass-strong rounded-2xl overflow-hidden"><table className="w-full text-sm"><thead className="text-xs uppercase text-muted-foreground bg-white/[0.03]"><tr><th className="text-left p-3">Sensor</th><th className="text-left p-3">DevEUI</th><th className="text-left p-3">Área</th><th className="text-right p-3">Temp.</th><th className="text-right p-3">Umid.</th><th className="text-right p-3">CO₂</th><th className="text-right p-3">Bateria</th><th className="text-right p-3">RSSI/SNR</th><th className="text-right p-3">Status</th></tr></thead><tbody>{sensors.map((s) => <tr key={s.dev_eui} className="border-t border-white/5 hover:bg-white/[0.03]"><td className="p-3 font-medium">{s.sensor_name}</td><td className="p-3 text-muted-foreground">{s.dev_eui}</td><td className="p-3">{s.area}</td><td className="p-3 text-right tabular-nums">{formatDecimal(s.temperature)} °C</td><td className="p-3 text-right tabular-nums">{formatDecimal(s.humidity)}%</td><td className="p-3 text-right tabular-nums">{formatInt(s.co2)}</td><td className="p-3 text-right">{formatInt(s.battery)}%</td><td className="p-3 text-right">{formatInt(s.rssi)} / {formatInt(s.snr)}</td><td className="p-3 text-right"><span className="text-success">Online</span></td></tr>)}</tbody></table></div></>;
+  const values = sensors.length ? sensors : sensorRegistry;
+  const avg = (field: Layer) => {
+    const nums = values.map((s) => s[field]).filter((v): v is number => typeof v === "number");
+    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+  };
+  const activeAlarms = values.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).length;
+  const avgBattery = values.map((s) => s.battery).filter((v): v is number => typeof v === "number");
+  const batteryAvg = avgBattery.length ? avgBattery.reduce((a, b) => a + b, 0) / avgBattery.length : null;
+
+  return (
+    <>
+      <PageHeader title="Sensores" description="Visão geral dos 15 sensores AM103 instalados na unidade.">
+        <div className="flex items-center gap-3">
+          <div className="glass rounded-2xl px-4 py-2.5 flex items-center gap-2 text-sm text-muted-foreground min-w-[260px]"><Search className="h-4 w-4" /> Buscar sensor...</div>
+          <button className="glass rounded-2xl px-4 py-2.5 flex items-center gap-2 text-sm text-muted-foreground"><SlidersHorizontal className="h-4 w-4" /> Filtros <ChevronDown className="h-4 w-4" /></button>
+        </div>
+      </PageHeader>
+
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+        <MiniStat icon={Wifi} label="Sensores online" value={values.length} />
+        <MiniStat icon={Thermometer} label="Temperatura média" value={`${formatDecimal(avg("temperature"))} °C`} />
+        <MiniStat icon={Droplets} label="Umidade média" value={`${formatDecimal(avg("humidity"))} %`} />
+        <MiniStat icon={Cloud} label="CO₂ médio" value={`${formatInt(avg("co2"))} ppm`} />
+        <MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(batteryAvg)} %`} />
+        <MiniStat icon={Bell} label="Alertas ativos" value={activeAlarms} />
+      </section>
+
+      <section className="glass-strong rounded-2xl p-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>Exibição:</span>
+            <div className="glass rounded-xl p-1 flex items-center gap-1">
+              <button className="h-9 w-9 rounded-lg bg-white/10 text-white grid place-items-center"><LayoutDashboard className="h-4 w-4" /></button>
+              <button className="h-9 w-9 rounded-lg text-muted-foreground grid place-items-center"><FileText className="h-4 w-4" /></button>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 text-sm text-muted-foreground">
+            <span>Ordenar por:</span>
+            <button className="glass rounded-xl px-4 py-2 flex items-center gap-3 text-foreground min-w-[180px] justify-between">Área (A-Z) <ChevronDown className="h-4 w-4 text-muted-foreground" /></button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
+          {values.map((sensor, index) => <SensorCard key={sensor.dev_eui || sensor.sensor_id} sensor={sensor} index={index} />)}
+        </div>
+      </section>
+
+      <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground pb-1">
+        <span>Última atualização: hoje às {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+        <Activity className="h-3.5 w-3.5" />
+        <span>Atualiza automaticamente a cada 5 minutos</span>
+      </div>
+    </>
+  );
 }
 
 function HistoryView({ period, setPeriod, history }: { period: Period; setPeriod: (p: Period) => void; history: HistoryPayload | null }) {
