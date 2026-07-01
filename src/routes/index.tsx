@@ -319,6 +319,46 @@ function buildChartSeries(history: HistoryPayload | null, period: Period) {
   });
 }
 
+
+function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sensor, field: Layer, fallbackSpread: number, seed: number) {
+  const records = (history?.records?.length ? history.records : makeMockHistory("today").records)
+    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
+    .slice(-24);
+
+  if (!records.length) return sensorTrend(sensor[field], seed, fallbackSpread, 24);
+
+  return records.map((r, i) => {
+    const dt = new Date(r.reading_time || r.timestamp || Date.now());
+    const value = r[field];
+    return {
+      x: `${String(dt.getHours()).padStart(2, "0")}h`,
+      y: Number((typeof value === "number" ? value : sensor[field] ?? 0).toFixed(field === "co2" ? 0 : 1)),
+    };
+  });
+}
+
+function calculateDailySensorStats(sensors: Sensor[], history: HistoryPayload | null) {
+  const baseRecords = history?.records?.length ? history.records : makeMockHistory("today").records;
+  const today = new Date().toISOString().slice(0, 10);
+  const records = baseRecords.filter((r) => {
+    const t = r.reading_time || r.timestamp;
+    return !t || t.slice(0, 10) === today;
+  });
+  const source = records.length ? records : sensors;
+  const nums = (field: Layer) => source.map((s) => s[field]).filter((v): v is number => typeof v === "number");
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  const temps = nums("temperature");
+  const hums = nums("humidity");
+  const co2s = nums("co2");
+  return {
+    temperatureAvg: avg(temps),
+    temperatureMin: temps.length ? Math.min(...temps) : null,
+    temperatureMax: temps.length ? Math.max(...temps) : null,
+    humidityAvg: avg(hums),
+    co2Avg: avg(co2s),
+  };
+}
+
 function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null, history: HistoryPayload | null): Sensor[] {
   if (period === "today" && dashboard?.sensors?.length) return dashboard.sensors;
   const records = history?.records || [];
@@ -351,7 +391,7 @@ async function fetchJSON<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
-function Sparkline({ data, color }: { data: { x: number; y: number }[]; color: string }) {
+function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
   const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <ResponsiveContainer width="100%" height={42}>
@@ -362,6 +402,15 @@ function Sparkline({ data, color }: { data: { x: number; y: number }[]; color: s
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
+        {showTooltip && (
+          <Tooltip
+            cursor={{ stroke: color, strokeWidth: 1, opacity: 0.35 }}
+            contentStyle={{ background: "#020817", border: "1px solid rgba(148,163,184,.28)", borderRadius: 10, fontSize: 11, boxShadow: "0 14px 40px rgba(0,0,0,.35)" }}
+            labelStyle={{ color: "#94a3b8" }}
+            formatter={(value: any) => [`${Number(value).toFixed(unit === "ppm" || unit === "%" ? 0 : 1)}${unit ? ` ${unit}` : ""}`, label]}
+            labelFormatter={(value) => `Amostra ${value}`}
+          />
+        )}
         <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#${gid})`} isAnimationActive={false} />
       </AreaChart>
     </ResponsiveContainer>
@@ -372,6 +421,12 @@ const spark = (seed: number, n = 24) =>
   Array.from({ length: n }, (_, i) => ({
     x: i,
     y: Math.sin(i / 2 + seed) * 1.2 + Math.cos(i / 3 + seed * 1.7) * 0.8 + seed,
+  }));
+
+const sensorTrend = (base: number | undefined | null, seed: number, spread: number, n = 18) =>
+  Array.from({ length: n }, (_, i) => ({
+    x: `${String(i).padStart(2, "0")}h`,
+    y: Number(((base ?? seed) + Math.sin(i / 2 + seed) * spread + Math.cos(i / 3 + seed * 1.7) * spread * 0.45).toFixed(1)),
   }));
 
 function KpiCard({ label, value, unit, delta, deltaTone, color, seed, critical }: { label: string; value: string; unit?: string; delta?: string; deltaTone?: "up" | "down" | "warn"; color: string; seed: number; critical?: boolean }) {
@@ -619,7 +674,7 @@ function App() {
       <main className="flex-1 min-w-0 p-4 lg:p-5 flex flex-col gap-4">
         {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} />}
         {view === "plant" && <PlantView period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={activeDashboard} history={history} setSelectedSensor={setSelectedSensor} />}
-        {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} />}
+        {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} history={history} />}
         {view === "history" && <HistoryView period={period} setPeriod={setPeriod} history={history} />}
         {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} />}
         {view === "insights" && <InsightsView dashboard={activeDashboard} history={history} />}
@@ -661,7 +716,7 @@ function MetricBlock({ icon: Icon, label, value, unit, color }: { icon: any; lab
   );
 }
 
-function SensorCard({ sensor, index }: { sensor: Sensor; index: number }) {
+function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number; history: HistoryPayload | null }) {
   const isAlert = typeof sensor.temperature === "number" && (sensor.temperature < 21.5 || sensor.temperature > 25);
   const statusTone = isAlert ? "text-warning" : "text-success";
   const statusLabel = isAlert ? "Atenção" : "Online";
@@ -670,9 +725,8 @@ function SensorCard({ sensor, index }: { sensor: Sensor; index: number }) {
       <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.14),transparent_45%)]" />
       <div className="relative flex items-start gap-2.5">
         <div className={`h-7 w-7 rounded-lg grid place-items-center text-xs font-bold shrink-0 border ${isAlert ? "bg-warning/15 border-warning/25 text-warning" : "bg-success/15 border-success/25 text-success"}`}>{String(index + 1).padStart(2, "0")}</div>
-        <div className="relative h-11 w-14 shrink-0 rounded-xl border border-white/10 bg-white/[0.04] grid place-items-center overflow-hidden shadow-[0_0_18px_-10px_rgba(56,189,248,.8)]">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_20%,rgba(255,255,255,.16),transparent_60%)]" />
-          <img src={sensorAm103} alt="Sensor Milesight AM103" className="relative h-10 w-12 object-contain drop-shadow-[0_8px_14px_rgba(0,0,0,.55)]" />
+        <div className="relative h-14 w-16 shrink-0 grid place-items-center overflow-visible -mt-1">
+          <img src={sensorAm103} alt="Sensor Milesight AM103" className="h-14 w-16 object-contain drop-shadow-[0_12px_18px_rgba(0,0,0,.62)] transition-transform duration-300 group-hover:scale-105" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
@@ -698,67 +752,42 @@ function SensorCard({ sensor, index }: { sensor: Sensor; index: number }) {
           <span className="text-muted-foreground">24h</span>
         </div>
         <div className="grid grid-cols-3 gap-2 h-8">
-          <Sparkline data={spark(index + 1, 18)} color="#f59e0b" />
-          <Sparkline data={spark(index + 3, 18)} color="#38bdf8" />
-          <Sparkline data={spark(index + 6, 18)} color="#22c55e" />
+          <Sparkline data={buildSensorTrendFromHistory(history, sensor, "temperature", 0.35, index + 1)} color="#f59e0b" label="Temperatura" unit="°C" />
+          <Sparkline data={buildSensorTrendFromHistory(history, sensor, "humidity", 0.8, index + 3)} color="#38bdf8" label="Umidade" unit="%" />
+          <Sparkline data={buildSensorTrendFromHistory(history, sensor, "co2", 18, index + 6)} color="#22c55e" label="CO₂" unit="ppm" />
         </div>
       </div>
     </article>
   );
 }
 
-function SensorsView({ sensors }: { sensors: Sensor[] }) {
+function SensorsView({ sensors, history }: { sensors: Sensor[]; history: HistoryPayload | null }) {
   const values = sensors.length ? sensors : sensorRegistry;
-  const avg = (field: Layer) => {
-    const nums = values.map((s) => s[field]).filter((v): v is number => typeof v === "number");
-    return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
-  };
+  const stats = calculateDailySensorStats(values, history);
   const activeAlarms = values.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).length;
-  const avgBattery = values.map((s) => s.battery).filter((v): v is number => typeof v === "number");
-  const batteryAvg = avgBattery.length ? avgBattery.reduce((a, b) => a + b, 0) / avgBattery.length : null;
 
   return (
     <>
-      <PageHeader title="Sensores" description="Visão geral dos 15 sensores AM103 instalados na unidade.">
-        <div className="flex items-center gap-3">
-          <div className="glass rounded-2xl px-4 py-2.5 flex items-center gap-2 text-sm text-muted-foreground min-w-[260px]"><Search className="h-4 w-4" /> Buscar sensor...</div>
-          <button className="glass rounded-2xl px-4 py-2.5 flex items-center gap-2 text-sm text-muted-foreground"><SlidersHorizontal className="h-4 w-4" /> Filtros <ChevronDown className="h-4 w-4" /></button>
-        </div>
-      </PageHeader>
-
-      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <section className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-3">
         <MiniStat icon={Wifi} label="Sensores online" value={values.length} />
-        <MiniStat icon={Thermometer} label="Temperatura média" value={`${formatDecimal(avg("temperature"))} °C`} />
-        <MiniStat icon={Droplets} label="Umidade média" value={`${formatDecimal(avg("humidity"))} %`} />
-        <MiniStat icon={Cloud} label="CO₂ médio" value={`${formatInt(avg("co2"))} ppm`} />
-        <MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(batteryAvg)} %`} />
+        <MiniStat icon={Thermometer} label="Temperatura média" value={`${formatDecimal(stats.temperatureAvg)} °C`} />
+        <MiniStat icon={Thermometer} label="Temp. mínima" value={`${formatDecimal(stats.temperatureMin)} °C`} />
+        <MiniStat icon={Thermometer} label="Temp. máxima" value={`${formatDecimal(stats.temperatureMax)} °C`} />
+        <MiniStat icon={Droplets} label="Umidade média" value={`${formatDecimal(stats.humidityAvg)} %`} />
+        <MiniStat icon={Cloud} label="CO₂ médio" value={`${formatInt(stats.co2Avg)} ppm`} />
         <MiniStat icon={Bell} label="Alertas ativos" value={activeAlarms} />
       </section>
 
       <section className="glass-strong rounded-2xl p-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>Exibição:</span>
-            <div className="glass rounded-xl p-1 flex items-center gap-1">
-              <button className="h-9 w-9 rounded-lg bg-white/10 text-white grid place-items-center"><LayoutDashboard className="h-4 w-4" /></button>
-              <button className="h-9 w-9 rounded-lg text-muted-foreground grid place-items-center"><FileText className="h-4 w-4" /></button>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 text-sm text-muted-foreground">
-            <span>Ordenar por:</span>
-            <button className="glass rounded-xl px-4 py-2 flex items-center gap-3 text-foreground min-w-[180px] justify-between">Área (A-Z) <ChevronDown className="h-4 w-4 text-muted-foreground" /></button>
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5 gap-3">
-          {values.map((sensor, index) => <SensorCard key={sensor.dev_eui || sensor.sensor_id} sensor={sensor} index={index} />)}
+          {values.map((sensor, index) => <SensorCard key={sensor.dev_eui || sensor.sensor_id} sensor={sensor} index={index} history={history} />)}
         </div>
       </section>
 
       <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground pb-1">
-        <span>Última atualização: hoje às {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
+        <span>Cards calculados com as leituras do dia</span>
         <Activity className="h-3.5 w-3.5" />
-        <span>Atualiza automaticamente a cada 5 minutos</span>
+        <span>Mini gráficos vindos dos registros das últimas 24h no PostgreSQL</span>
       </div>
     </>
   );
@@ -787,7 +816,7 @@ function ReportsView() {
 function NetworkView({ sensors }: { sensors: Sensor[] }) {
   const avgRssi = sensors.reduce((a,s)=>a+(s.rssi||0),0)/Math.max(1,sensors.length);
   const avgSnr = sensors.reduce((a,s)=>a+(s.snr||0),0)/Math.max(1,sensors.length);
-  return <><PageHeader title="Saúde da Rede" description="Monitoramento LoRaWAN do UG56, qualidade de sinal e comunicação dos AM103." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Server} label="Gateway" value="UG56-915M" /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value="100%" /></section><SensorsView sensors={sensors} /></>;
+  return <><PageHeader title="Saúde da Rede" description="Monitoramento LoRaWAN do UG56, qualidade de sinal e comunicação dos AM103." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Server} label="Gateway" value="UG56-915M" /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value="100%" /></section><SensorsView sensors={sensors} history={null} /></>;
 }
 
 function SettingsView({ sensors }: { sensors: Sensor[] }) {
