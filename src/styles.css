@@ -130,7 +130,7 @@
 
     .dashboard-kpis .glass,
     .sensors-kpis .glass-strong {
-      min-height: 82px;
+      min-height: 70px;
     }
 
     .dashboard-map,
@@ -158,3 +158,10 @@
     height: 100%;
   }
 }
+
+  @media (min-width: 1600px) and (min-height: 1000px) {
+    .dashboard-kpis { gap: 0.55rem; }
+    .dashboard-charts { max-height: 150px; }
+    .dashboard-charts .glass-strong { min-height: 0; }
+    .dashboard-alerts { min-height: 58px; }
+  }
