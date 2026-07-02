@@ -404,16 +404,46 @@ function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null,
   });
 }
 
+function isValidDate(date: Date) {
+  return date instanceof Date && !Number.isNaN(date.getTime());
+}
+
+function formatDatePt(value: Date | string | null | undefined) {
+  if (!value) return "--";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValidDate(date)) return "--";
+  return date.toLocaleDateString("pt-BR");
+}
+
+function formatTimePt(value: Date | string | null | undefined) {
+  if (!value) return "--";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValidDate(date)) return "--";
+  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+async function parseResponseJSON<T>(res: Response, context: string): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    throw new Error(`${context}: resposta vazia do n8n`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`${context}: resposta não é JSON válido`);
+  }
+}
+
 async function fetchJSON<T>(url: string): Promise<T> {
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  return await parseResponseJSON<T>(res, url);
 }
 
 function emptyDashboard(): DashboardPayload {
   return {
     ok: false,
-    updatedAt: new Date().toISOString(),
+    updatedAt: "",
     refreshSeconds: 300,
     expectedSensors: sensorRegistry.length,
     sensorsOnline: 0,
@@ -642,7 +672,7 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
       </div>
       <div className="grid grid-cols-2 gap-y-1.5 text-xs pt-2 border-t border-white/10">
         <span className="text-muted-foreground">Status</span><span className="text-success text-right">Online</span>
-        <span className="text-muted-foreground">Última atualização</span><span className="text-right">{s.timestamp ? new Date(s.timestamp).toLocaleString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</span>
+        <span className="text-muted-foreground">Última atualização</span><span className="text-right">{formatTimePt(s.timestamp)}</span>
         <span className="text-muted-foreground">Bateria</span><span className="text-right flex items-center justify-end gap-1.5">{formatInt(s.battery)}%<span className="inline-block w-10 h-1.5 rounded-full bg-white/10 overflow-hidden"><span className="block h-full bg-success" style={{ width: `${s.battery ?? 0}%` }} /></span></span>
         <span className="text-muted-foreground">RSSI / SNR</span><span className="text-right text-success">{formatInt(s.rssi)} / {formatInt(s.snr)}</span>
       </div>
@@ -680,11 +710,26 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
   );
 }
 
+function useClientClock() {
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    const update = () => setNow(new Date());
+    update();
+    const timer = window.setInterval(update, 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return now;
+}
+
 function Header({ period, setPeriod, updatedAt, alarms, onNavigate }: { period: Period; setPeriod: (p: Period) => void; updatedAt?: string; alarms: number; onNavigate?: (view: View) => void }) {
+  const now = useClientClock();
+
   return (
     <header className="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-2.5 shrink-0 relative z-20">
-      <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2.5 text-sm"><span>{new Date().toLocaleDateString("pt-BR")}</span><Clock className="h-4 w-4 text-muted-foreground" /><span className="font-medium">{new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></div>
-      <div className="glass rounded-2xl px-4 py-2 flex items-center gap-2.5 justify-center"><span className="relative flex h-2.5 w-2.5"><span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" /><span className="relative rounded-full h-2.5 w-2.5 bg-success" /></span><div className="text-sm"><span className="text-muted-foreground">Status geral </span><span className="font-semibold text-success">Operacional</span><span className="text-muted-foreground ml-3">Atualizado {updatedAt ? new Date(updatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</span></div></div>
+      <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2.5 text-sm"><span>{formatDatePt(now)}</span><Clock className="h-4 w-4 text-muted-foreground" /><span className="font-medium">{formatTimePt(now)}</span></div>
+      <div className="glass rounded-2xl px-4 py-2 flex items-center gap-2.5 justify-center"><span className="relative flex h-2.5 w-2.5"><span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" /><span className="relative rounded-full h-2.5 w-2.5 bg-success" /></span><div className="text-sm"><span className="text-muted-foreground">Status geral </span><span className="font-semibold text-success">Operacional</span><span className="text-muted-foreground ml-3">Atualizado {formatTimePt(updatedAt)}</span></div></div>
       <div className="flex items-center gap-3"><PeriodSelect value={period} onChange={setPeriod} /><button onClick={() => onNavigate?.("alarms")} title="Ver alarmes" className="glass rounded-2xl p-2 relative hover:border-critical/50 transition-colors"><Bell className="h-5 w-5" />{alarms > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-critical text-[10px] font-bold grid place-items-center">{alarms}</span>}</button></div>
     </header>
   );
@@ -752,7 +797,7 @@ function alarmLabel(type: string) {
 
 function RecentAlerts({ alarms, onNavigate }: { alarms: any[]; onNavigate?: (view: View) => void }) {
   const list = alarms || [];
-  return <section className="dashboard-alerts glass-strong rounded-2xl p-2 flex flex-col lg:flex-row lg:items-center gap-2 h-[58px] shrink-0 overflow-hidden"><div className="text-sm font-medium shrink-0 lg:w-36">Alertas recentes</div>{list.length === 0 ? <div className="flex-1 text-xs text-muted-foreground">Nenhum alerta ativo com os limites configurados.</div> : <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">{list.slice(0, 3).map((a, i) => <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 min-w-0"><div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 text-warning bg-warning/15"><AlertTriangle className="h-4 w-4" /></div><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{a.sensor_id || a.sensorId}</div><div className="text-[11px] text-muted-foreground truncate">{alarmLabel(a.type)} • {formatDecimal(Number(a.value), a.unit === "ppm" ? 0 : 1)} {a.unit || ""}</div></div><div className="text-right shrink-0"><div className="text-[11px] font-medium text-warning">• Atenção</div><div className="text-[10px] text-muted-foreground">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</div></div></div>)}</div>}<button onClick={() => onNavigate?.("alarms")} className="text-xs text-info hover:underline shrink-0">Ver todos<br/>os alertas</button></section>;
+  return <section className="dashboard-alerts glass-strong rounded-2xl p-2 flex flex-col lg:flex-row lg:items-center gap-2 h-[58px] shrink-0 overflow-hidden"><div className="text-sm font-medium shrink-0 lg:w-36">Alertas recentes</div>{list.length === 0 ? <div className="flex-1 text-xs text-muted-foreground">Nenhum alerta ativo com os limites configurados.</div> : <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">{list.slice(0, 3).map((a, i) => <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 min-w-0"><div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 text-warning bg-warning/15"><AlertTriangle className="h-4 w-4" /></div><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{a.sensor_id || a.sensorId}</div><div className="text-[11px] text-muted-foreground truncate">{alarmLabel(a.type)} • {formatDecimal(Number(a.value), a.unit === "ppm" ? 0 : 1)} {a.unit || ""}</div></div><div className="text-right shrink-0"><div className="text-[11px] font-medium text-warning">• Atenção</div><div className="text-[10px] text-muted-foreground">{formatTimePt(a.timestamp)}</div></div></div>)}</div>}<button onClick={() => onNavigate?.("alarms")} className="text-xs text-info hover:underline shrink-0">Ver todos<br/>os alertas</button></section>;
 }
 
 function App() {
@@ -991,11 +1036,13 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
     try {
       const res = await fetch(`${N8N_BASE}/fleury-settings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      onSettingsSaved(settings);
+      const payload = await parseResponseJSON<any>(res, "Salvar configurações").catch(() => null);
+      const savedSettings = payload ? normalizeSettings(payload) : settings;
+      onSettingsSaved(savedSettings);
+      setSettings(savedSettings);
       setStatus("Limites enviados ao n8n e salvos no PostgreSQL/Redis.");
     } catch {
       setStatus("Não foi possível salvar agora. Verifique o workflow fleury-settings no n8n.");
