@@ -40,7 +40,7 @@ Endpoints usados:
 - GET `/fleury-history?period=30 days&sensor=all&limit=5000`
 
 ## Próximos ajustes esperados
-- Trocar devEUIs pendente01...pendente15 pelos reais.
+- ✅ devEUIs reais dos 15 sensores aplicados no `sensorRegistry`.
 - Ajustar coordenadas x/y dos sensores na planta real.
 - Substituir imagem de planta por render/planta 3D final.
 - Ajustar payload da API caso o n8n retorne nomes diferentes.

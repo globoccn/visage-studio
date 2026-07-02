@@ -113,7 +113,31 @@ type HistoryPayload = {
   records: HistoryRecord[];
 };
 
+type AlarmSettings = {
+  temperature_low: number;
+  temperature_high: number;
+  humidity_low: number;
+  humidity_high: number;
+  co2_low: number;
+  co2_high: number;
+};
+
+type ApiState = {
+  loading: boolean;
+  error: string | null;
+};
+
 const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://fleury-bh-n8n.gpfgqx.easypanel.host/webhook";
+const ENABLE_MOCKS = (import.meta as any).env?.VITE_ENABLE_MOCKS === "true";
+
+const DEFAULT_ALARM_SETTINGS: AlarmSettings = {
+  temperature_low: 21.5,
+  temperature_high: 25,
+  humidity_low: 35,
+  humidity_high: 65,
+  co2_low: 400,
+  co2_high: 1000,
+};
 
 const periodLabel: Record<Period, string> = {
   today: "Hoje",
@@ -173,21 +197,21 @@ const layerConfig: Record<Layer, { label: string; unit: string; icon: any; stops
 };
 
 const sensorRegistry: Sensor[] = [
-  { dev_eui: "pendente01", sensor_id: "S01", sensor_name: "Sensor 01", area: "Recepção", floor: "Térreo", x: 6, y: 35, temperature: 23.2, humidity: 49.5, co2: 610, battery: 100, rssi: -65, snr: 12 },
-  { dev_eui: "pendente02", sensor_id: "S02", sensor_name: "Sensor 02", area: "Espera", floor: "Térreo", x: 41, y: 42, temperature: 23.8, humidity: 48, co2: 640, battery: 100, rssi: -66, snr: 13 },
-  { dev_eui: "pendente03", sensor_id: "S03", sensor_name: "Sensor 03", area: "Coleta 01", floor: "Térreo", x: 58, y: 42, temperature: 24.1, humidity: 47.5, co2: 680, battery: 100, rssi: -68, snr: 12 },
-  { dev_eui: "pendente04", sensor_id: "S04", sensor_name: "Sensor 04", area: "Coleta 02", floor: "Térreo", x: 75, y: 42, temperature: 24.4, humidity: 46.9, co2: 700, battery: 100, rssi: -69, snr: 11 },
-  { dev_eui: "pendente05", sensor_id: "S05", sensor_name: "Sensor 05", area: "Triagem", floor: "Térreo", x: 88, y: 62, temperature: 22.8, humidity: 50.1, co2: 590, battery: 100, rssi: -70, snr: 10 },
-  { dev_eui: "pendente06", sensor_id: "S06", sensor_name: "Sensor 06", area: "Recepção Central", floor: "Térreo", x: 68, y: 58, temperature: 25.6, humidity: 45.2, co2: 760, battery: 100, rssi: -64, snr: 14, alarm_type: "temperature_high", alarm_severity: "warning" },
-  { dev_eui: "pendente07", sensor_id: "S07", sensor_name: "Sensor 07", area: "Corredor 01", floor: "Térreo", x: 62, y: 78, temperature: 25.2, humidity: 44.8, co2: 720, battery: 100, rssi: -67, snr: 11, alarm_type: "temperature_high", alarm_severity: "warning" },
-  { dev_eui: "pendente08", sensor_id: "S08", sensor_name: "Sensor 08", area: "Consultório 01", floor: "Térreo", x: 50, y: 65, temperature: 22.1, humidity: 52.2, co2: 560, battery: 100, rssi: -72, snr: 9 },
-  { dev_eui: "pendente09", sensor_id: "S09", sensor_name: "Sensor 09", area: "Consultório 02", floor: "Térreo", x: 38, y: 60, temperature: 23.6, humidity: 49, co2: 610, battery: 100, rssi: -73, snr: 9 },
-  { dev_eui: "pendente10", sensor_id: "S10", sensor_name: "Sensor 10", area: "Laboratório", floor: "Térreo", x: 18, y: 78, temperature: 21.2, humidity: 51.5, co2: 540, battery: 100, rssi: -74, snr: 8, alarm_type: "temperature_low", alarm_severity: "warning" },
-  { dev_eui: "pendente11", sensor_id: "S11", sensor_name: "Sensor 11", area: "Sala Técnica", floor: "Térreo", x: 23, y: 42, temperature: 24.8, humidity: 43.6, co2: 690, battery: 100, rssi: -70, snr: 9 },
-  { dev_eui: "pendente12", sensor_id: "S12", sensor_name: "Sensor 12", area: "Administrativo", floor: "Térreo", x: 32, y: 22, temperature: 23, humidity: 48.4, co2: 620, battery: 100, rssi: -66, snr: 12 },
-  { dev_eui: "pendente13", sensor_id: "S13", sensor_name: "Sensor 13", area: "Sala de Exames 01", floor: "Térreo", x: 47, y: 16, temperature: 22.7, humidity: 47.1, co2: 585, battery: 100, rssi: -69, snr: 11 },
-  { dev_eui: "pendente14", sensor_id: "S14", sensor_name: "Sensor 14", area: "Sala de Exames 02", floor: "Térreo", x: 64, y: 16, temperature: 24, humidity: 46.7, co2: 650, battery: 100, rssi: -71, snr: 10 },
-  { dev_eui: "pendente15", sensor_id: "S15", sensor_name: "Sensor 15", area: "Apoio", floor: "Térreo", x: 86, y: 28, temperature: 23.4, humidity: 48.9, co2: 600, battery: 100, rssi: -67, snr: 12 },
+  { dev_eui: "24E124136E312780", sensor_id: "EM300-01", sensor_name: "EM300-01", area: "Recepção", floor: "Térreo", x: 6, y: 35, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314787", sensor_id: "EM300-02", sensor_name: "EM300-02", area: "Espera", floor: "Térreo", x: 41, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314516", sensor_id: "EM300-03", sensor_name: "EM300-03", area: "Coleta 01", floor: "Térreo", x: 58, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314466", sensor_id: "EM300-04", sensor_name: "EM300-04", area: "Coleta 02", floor: "Térreo", x: 75, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E311869", sensor_id: "EM300-05", sensor_name: "EM300-05", area: "Triagem", floor: "Térreo", x: 88, y: 62, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E312236", sensor_id: "EM300-06", sensor_name: "EM300-06", area: "Recepção Central", floor: "Térreo", x: 68, y: 58, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F471011", sensor_id: "AM103L-07", sensor_name: "AM 103 L - 07", area: "Corredor 01", floor: "Térreo", x: 62, y: 78, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478289", sensor_id: "AM103L-08", sensor_name: "AM 103 L - 08", area: "Consultório 01", floor: "Térreo", x: 50, y: 65, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F454786", sensor_id: "AM103L-09", sensor_name: "AM 103 L - 09", area: "Consultório 02", floor: "Térreo", x: 38, y: 60, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F454815", sensor_id: "AM103L-10", sensor_name: "AM 103 L - 10", area: "Laboratório", floor: "Térreo", x: 18, y: 78, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478878", sensor_id: "AM103L-11", sensor_name: "AM 103 L - 11", area: "Sala Técnica", floor: "Térreo", x: 23, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F457456", sensor_id: "AM103L-12", sensor_name: "AM 103 L - 12", area: "Administrativo", floor: "Térreo", x: 32, y: 22, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478841", sensor_id: "AM103L-13", sensor_name: "AM 103 L - 13", area: "Sala de Exames 01", floor: "Térreo", x: 47, y: 16, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478688", sensor_id: "AM103L-14", sensor_name: "AM 103 L - 14", area: "Sala de Exames 02", floor: "Térreo", x: 64, y: 16, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Apoio", floor: "Térreo", x: 86, y: 28, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
 
 function valueForLayer(sensor: Sensor, layer: Layer) {
@@ -294,7 +318,7 @@ function makeMockHistory(period: Period): HistoryPayload {
 }
 
 function buildChartSeries(history: HistoryPayload | null, period: Period) {
-  const records = history?.records?.length ? history.records : makeMockHistory(period).records;
+  const records = history?.records || [];
   const groups = new Map<string, HistoryRecord[]>();
   records.forEach((r) => {
     const dt = new Date(r.reading_time || r.timestamp || Date.now());
@@ -320,11 +344,11 @@ function buildChartSeries(history: HistoryPayload | null, period: Period) {
 
 
 function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sensor, field: Layer, fallbackSpread: number, seed: number) {
-  const records = (history?.records?.length ? history.records : makeMockHistory("today").records)
+  const records = (history?.records || [])
     .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
     .slice(-24);
 
-  if (!records.length) return sensorTrend(sensor[field], seed, fallbackSpread, 24);
+  if (!records.length) return [];
 
   return records.map((r, i) => {
     const dt = new Date(r.reading_time || r.timestamp || Date.now());
@@ -337,7 +361,7 @@ function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sen
 }
 
 function calculateDailySensorStats(sensors: Sensor[], history: HistoryPayload | null) {
-  const baseRecords = history?.records?.length ? history.records : makeMockHistory("today").records;
+  const baseRecords = history?.records || [];
   const today = new Date().toISOString().slice(0, 10);
   const records = baseRecords.filter((r) => {
     const t = r.reading_time || r.timestamp;
@@ -361,7 +385,7 @@ function calculateDailySensorStats(sensors: Sensor[], history: HistoryPayload | 
 function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null, history: HistoryPayload | null): Sensor[] {
   if (period === "today" && dashboard?.sensors?.length) return dashboard.sensors;
   const records = history?.records || [];
-  if (!records.length) return makeMockDashboard(period).sensors;
+  if (!records.length) return sensorRegistry;
   const grouped = new Map<string, HistoryRecord[]>();
   records.forEach((r) => grouped.set(r.dev_eui, [...(grouped.get(r.dev_eui) || []), r]));
   return Array.from(grouped.entries()).map(([dev, items]) => {
@@ -380,14 +404,79 @@ function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null,
   });
 }
 
-async function fetchJSON<T>(url: string, fallback: T): Promise<T> {
-  try {
-    const res = await fetch(url, { cache: "no-store" });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch {
-    return fallback;
-  }
+async function fetchJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+function emptyDashboard(): DashboardPayload {
+  return {
+    ok: false,
+    updatedAt: new Date().toISOString(),
+    refreshSeconds: 300,
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline: 0,
+    kpis: { temperatureAvg: null, temperatureMin: null, temperatureMax: null, humidityAvg: null, co2Avg: null, activeAlarms: 0 },
+    alarms: [],
+    sensors: sensorRegistry,
+  };
+}
+
+function emptyHistory(): HistoryPayload {
+  return { ok: false, count: 0, records: [] };
+}
+
+function normalizeSettings(payload: any): AlarmSettings {
+  const source = payload?.settings || payload || {};
+  return {
+    temperature_low: Number(source.temperature_low ?? DEFAULT_ALARM_SETTINGS.temperature_low),
+    temperature_high: Number(source.temperature_high ?? DEFAULT_ALARM_SETTINGS.temperature_high),
+    humidity_low: Number(source.humidity_low ?? DEFAULT_ALARM_SETTINGS.humidity_low),
+    humidity_high: Number(source.humidity_high ?? DEFAULT_ALARM_SETTINGS.humidity_high),
+    co2_low: Number(source.co2_low ?? DEFAULT_ALARM_SETTINGS.co2_low),
+    co2_high: Number(source.co2_high ?? DEFAULT_ALARM_SETTINGS.co2_high),
+  };
+}
+
+function buildAlarmsFromSensors(sensors: Sensor[], settings: AlarmSettings) {
+  const alarms: any[] = [];
+  sensors.forEach((s) => {
+    const push = (type: string, value: number | null, unit: string, limit: number) => {
+      if (typeof value !== "number") return;
+      alarms.push({ sensor_id: s.sensor_id, sensor_name: s.sensor_name, area: s.area, type, severity: "warning", value, unit, limit, timestamp: s.timestamp });
+    };
+    if (typeof s.temperature === "number") {
+      if (s.temperature < settings.temperature_low) push("temperature_low", s.temperature, "°C", settings.temperature_low);
+      if (s.temperature > settings.temperature_high) push("temperature_high", s.temperature, "°C", settings.temperature_high);
+    }
+    if (typeof s.humidity === "number") {
+      if (s.humidity < settings.humidity_low) push("humidity_low", s.humidity, "%", settings.humidity_low);
+      if (s.humidity > settings.humidity_high) push("humidity_high", s.humidity, "%", settings.humidity_high);
+    }
+    if (typeof s.co2 === "number") {
+      if (s.co2 < settings.co2_low) push("co2_low", s.co2, "ppm", settings.co2_low);
+      if (s.co2 > settings.co2_high) push("co2_high", s.co2, "ppm", settings.co2_high);
+    }
+  });
+  return alarms;
+}
+
+function applyAlarmSettings(dashboard: DashboardPayload, settings: AlarmSettings): DashboardPayload {
+  const baseSensors = dashboard.sensors?.length ? dashboard.sensors : sensorRegistry;
+  const alarms = buildAlarmsFromSensors(baseSensors, settings);
+  const sensors = baseSensors.map((sensor) => {
+    const alarm = alarms.find((a) => a.sensor_id === sensor.sensor_id || a.dev_eui === sensor.dev_eui);
+    return { ...sensor, alarm_type: alarm?.type || null, alarm_severity: alarm?.severity || null };
+  });
+  return {
+    ...dashboard,
+    sensors,
+    expectedSensors: dashboard.expectedSensors || sensorRegistry.length,
+    sensorsOnline: dashboard.sensorsOnline ?? sensors.filter((s) => !!s.timestamp).length,
+    alarms,
+    kpis: { ...dashboard.kpis, activeAlarms: alarms.length },
+  };
 }
 
 function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
@@ -437,7 +526,7 @@ function KpiCard({ label, value, unit, delta, deltaTone, color, seed, critical }
           <span className="text-xl font-semibold tracking-tight truncate">{value}</span>
           {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
         </div>
-        <div className="w-20 shrink-0 -mb-1"><Sparkline data={spark(seed)} color={color} /></div>
+        <div className="w-20 shrink-0 -mb-1 text-[10px] text-muted-foreground text-right">tempo real</div>
       </div>
       {delta && (
         <div className={`text-[11px] flex items-center gap-1 ${critical ? "text-critical" : deltaTone === "up" ? "text-success" : deltaTone === "down" ? "text-info" : "text-warning"}`}>
@@ -538,7 +627,7 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
 
 function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[] }) {
   const s = sensor || sensorRegistry[5];
-  const isAlert = typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25);
+  const isAlert = !!s.alarm_type;
   return (
     <div className="dashboard-sensor-detail glass-strong rounded-2xl p-2.5 flex flex-col gap-1.5 min-w-0 h-full min-h-0">
       <div className="flex items-center justify-between">
@@ -566,7 +655,7 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
 }
 
 function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history, selectedSensor, setSelectedSensor, onNavigate }: { period: Period; setPeriod: (p: Period) => void; layer: Layer; setLayer: (l: Layer) => void; dashboard: DashboardPayload | null; history: HistoryPayload | null; selectedSensor: Sensor | null; setSelectedSensor: (s: Sensor) => void; onNavigate: (view: View) => void }) {
-  const data = dashboard || makeMockDashboard(period);
+  const data = dashboard || emptyDashboard();
   const series = useMemo(() => buildChartSeries(history, period), [history, period]);
   const heatmapSensors = useMemo(() => buildHeatmapSensors(period, dashboard, history), [period, dashboard, history]);
   const comfort = Math.max(0, Math.round(((data.expectedSensors - data.kpis.activeAlarms) / data.expectedSensors) * 100));
@@ -649,9 +738,21 @@ function ChartCard({ title, type, data }: { title: string; type: "temp" | "humid
   return <div className="glass-strong rounded-2xl p-2.5 min-w-0 h-full min-h-0 flex flex-col"><div className="flex items-center gap-2 text-xs font-medium mb-1 shrink-0"><span className="h-6 w-6 rounded-lg bg-white/5 grid place-items-center"><Icon className={`h-3.5 w-3.5 ${labelColor}`} /></span><span>{title}</span></div><div className="flex-1 min-h-0"><ResponsiveContainer><AreaChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id={`g-${type}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={0.5} /><stop offset="100%" stopColor={color} stopOpacity={0} /></linearGradient></defs><XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={isTemp ? [18, 30] : isHum ? [0, 100] : [0, 1500]} width={28} />{isTemp && <><ReferenceArea y1={21.5} y2={25} fill="#22c55e" fillOpacity={0.10} /><Line type="monotone" dataKey="min" stroke="#94a3b8" strokeDasharray="3 3" strokeWidth={1} dot={false} /></>}{isHum && <ReferenceArea y1={40} y2={60} fill="#22c55e" fillOpacity={0.12} />}{type === "co2" && <ReferenceArea y1={1000} y2={1500} fill="#ef4444" fillOpacity={0.15} />}<Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} /><Area type="monotone" dataKey={isTemp ? "temp" : isHum ? "h" : "c"} stroke={color} strokeWidth={2} fill={`url(#g-${type})`} isAnimationActive /></AreaChart></ResponsiveContainer></div></div>;
 }
 
+function alarmLabel(type: string) {
+  const labels: Record<string, string> = {
+    temperature_low: "Temperatura baixa",
+    temperature_high: "Temperatura alta",
+    humidity_low: "Umidade baixa",
+    humidity_high: "Umidade alta",
+    co2_low: "CO₂ baixo",
+    co2_high: "CO₂ alto",
+  };
+  return labels[type] || type || "Alarme";
+}
+
 function RecentAlerts({ alarms, onNavigate }: { alarms: any[]; onNavigate?: (view: View) => void }) {
-  const list = alarms.length ? alarms : [{ sensor_id: "S06", area: "Recepção Central", type: "temperature_high", value: 25.6, timestamp: new Date().toISOString() }, { sensor_id: "S10", area: "Laboratório", type: "temperature_low", value: 21.2, timestamp: new Date().toISOString() }];
-  return <section className="dashboard-alerts glass-strong rounded-2xl p-2 flex flex-col lg:flex-row lg:items-center gap-2 h-[58px] shrink-0 overflow-hidden"><div className="text-sm font-medium shrink-0 lg:w-36">Alertas recentes</div><div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">{list.slice(0, 3).map((a, i) => <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 min-w-0"><div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 text-warning bg-warning/15"><AlertTriangle className="h-4 w-4" /></div><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{a.sensor_id || a.sensorId}</div><div className="text-[11px] text-muted-foreground truncate">{a.type === "temperature_low" ? "Temperatura baixa" : "Temperatura alta"} • {formatDecimal(Number(a.value))} °C</div></div><div className="text-right shrink-0"><div className="text-[11px] font-medium text-warning">• Atenção</div><div className="text-[10px] text-muted-foreground">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</div></div></div>)}</div><button onClick={() => onNavigate?.("alarms")} className="text-xs text-info hover:underline shrink-0">Ver todos<br/>os alertas</button></section>;
+  const list = alarms || [];
+  return <section className="dashboard-alerts glass-strong rounded-2xl p-2 flex flex-col lg:flex-row lg:items-center gap-2 h-[58px] shrink-0 overflow-hidden"><div className="text-sm font-medium shrink-0 lg:w-36">Alertas recentes</div>{list.length === 0 ? <div className="flex-1 text-xs text-muted-foreground">Nenhum alerta ativo com os limites configurados.</div> : <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">{list.slice(0, 3).map((a, i) => <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 min-w-0"><div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 text-warning bg-warning/15"><AlertTriangle className="h-4 w-4" /></div><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{a.sensor_id || a.sensorId}</div><div className="text-[11px] text-muted-foreground truncate">{alarmLabel(a.type)} • {formatDecimal(Number(a.value), a.unit === "ppm" ? 0 : 1)} {a.unit || ""}</div></div><div className="text-right shrink-0"><div className="text-[11px] font-medium text-warning">• Atenção</div><div className="text-[10px] text-muted-foreground">{a.timestamp ? new Date(a.timestamp).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</div></div></div>)}</div>}<button onClick={() => onNavigate?.("alarms")} className="text-xs text-info hover:underline shrink-0">Ver todos<br/>os alertas</button></section>;
 }
 
 function App() {
@@ -661,25 +762,47 @@ function App() {
   const [dashboard, setDashboard] = useState<DashboardPayload | null>(null);
   const [history, setHistory] = useState<HistoryPayload | null>(null);
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
+  const [settings, setSettings] = useState<AlarmSettings>(DEFAULT_ALARM_SETTINGS);
+  const [apiState, setApiState] = useState<ApiState>({ loading: true, error: null });
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      const dashUrl = period === "today" ? `${N8N_BASE}/fleury-dashboard-latest` : `${N8N_BASE}/fleury-history?period=${encodeURIComponent(periodQuery[period])}&sensor=all&limit=5000`;
-      const [dash, hist] = await Promise.all([
-        period === "today" ? fetchJSON<DashboardPayload>(dashUrl, makeMockDashboard(period)) : Promise.resolve(makeMockDashboard(period)),
-        fetchJSON<HistoryPayload>(`${N8N_BASE}/fleury-history?period=${encodeURIComponent(periodQuery[period])}&sensor=all&limit=5000`, makeMockHistory(period)),
-      ]);
-      if (!mounted) return;
-      setDashboard(period === "today" ? dash : makeDashboardFromHistory(hist, period));
-      setHistory(hist);
+      setApiState((prev) => ({ ...prev, loading: true }));
+      const historyUrl = `${N8N_BASE}/fleury-history?period=${encodeURIComponent(periodQuery[period])}&sensor=all&limit=5000`;
+      try {
+        const settingsPayload = await fetchJSON<any>(`${N8N_BASE}/fleury-settings`).catch(() => null);
+        const nextSettings = settingsPayload ? normalizeSettings(settingsPayload) : settings;
+        const hist = await fetchJSON<HistoryPayload>(historyUrl);
+        const dash = period === "today"
+          ? await fetchJSON<DashboardPayload>(`${N8N_BASE}/fleury-dashboard-latest`)
+          : makeDashboardFromHistory(hist, period, nextSettings);
+        if (!mounted) return;
+        setSettings(nextSettings);
+        setHistory(hist);
+        setDashboard(applyAlarmSettings(dash, nextSettings));
+        setApiState({ loading: false, error: null });
+      } catch (error: any) {
+        if (!mounted) return;
+        if (ENABLE_MOCKS) {
+          const hist = makeMockHistory(period);
+          const dash = period === "today" ? makeMockDashboard(period) : makeDashboardFromHistory(hist, period, settings);
+          setHistory(hist);
+          setDashboard(applyAlarmSettings(dash, settings));
+          setApiState({ loading: false, error: "n8n indisponível; exibindo dados mockados por VITE_ENABLE_MOCKS=true." });
+        } else {
+          setHistory(emptyHistory());
+          setDashboard(emptyDashboard());
+          setApiState({ loading: false, error: error?.message || "Falha ao carregar dados do n8n." });
+        }
+      }
     };
     load();
     const timer = setInterval(load, 5 * 60 * 1000);
     return () => { mounted = false; clearInterval(timer); };
   }, [period]);
 
-  const activeDashboard = dashboard || makeMockDashboard(period);
+  const activeDashboard = dashboard || emptyDashboard();
 
   return (
     <div className="h-screen w-full flex overflow-hidden text-foreground">
@@ -689,28 +812,29 @@ function App() {
         <div className="mt-auto flex flex-col gap-3"><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div><div className="text-[11px] text-success mt-1">{activeDashboard.expectedSensors} previstos</div></div><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div><div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div></div>
       </aside>
       <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
+        {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">Integração n8n: {apiState.error}</div>}
         {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} />}
         {view === "plant" && <PlantView period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={activeDashboard} history={history} setSelectedSensor={setSelectedSensor} />}
         {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} history={history} />}
         {view === "history" && <HistoryView period={period} setPeriod={setPeriod} history={history} />}
-        {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} />}
+        {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} settings={settings} />}
         {view === "insights" && <InsightsView dashboard={activeDashboard} history={history} />}
         {view === "reports" && <ReportsView />}
         {view === "network" && <NetworkView sensors={activeDashboard.sensors} />}
-        {view === "settings" && <SettingsView sensors={activeDashboard.sensors} />}
+        {view === "settings" && <SettingsView sensors={activeDashboard.sensors} initialSettings={settings} onSettingsSaved={setSettings} />}
       </main>
     </div>
   );
 }
 
-function makeDashboardFromHistory(history: HistoryPayload, period: Period): DashboardPayload {
+function makeDashboardFromHistory(history: HistoryPayload, period: Period, settings: AlarmSettings = DEFAULT_ALARM_SETTINGS): DashboardPayload {
   const sensors = buildHeatmapSensors(period, null, history);
   const temps = sensors.map((s) => s.temperature).filter((v): v is number => typeof v === "number");
   const hums = sensors.map((s) => s.humidity).filter((v): v is number => typeof v === "number");
   const co2s = sensors.map((s) => s.co2).filter((v): v is number => typeof v === "number");
   const avg = (a: number[]) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
-  const alarms = sensors.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).map((s) => ({ sensor_id: s.sensor_id, area: s.area, value: s.temperature, type: s.temperature! < 21.5 ? "temperature_low" : "temperature_high", timestamp: s.timestamp }));
-  return { ok: true, updatedAt: new Date().toISOString(), refreshSeconds: 300, expectedSensors: 15, sensorsOnline: sensors.length, kpis: { temperatureAvg: avg(temps), temperatureMin: temps.length ? Math.min(...temps) : null, temperatureMax: temps.length ? Math.max(...temps) : null, humidityAvg: avg(hums), co2Avg: avg(co2s), activeAlarms: alarms.length }, alarms, sensors };
+  const alarms = buildAlarmsFromSensors(sensors, settings);
+  return { ok: true, updatedAt: new Date().toISOString(), refreshSeconds: 300, expectedSensors: sensorRegistry.length, sensorsOnline: sensors.filter((sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number").length, kpis: { temperatureAvg: avg(temps), temperatureMin: temps.length ? Math.min(...temps) : null, temperatureMax: temps.length ? Math.max(...temps) : null, humidityAvg: avg(hums), co2Avg: avg(co2s), activeAlarms: alarms.length }, alarms, sensors };
 }
 
 function PageHeader({ title, description, children }: { title: string; description: string; children?: any }) {
@@ -742,7 +866,7 @@ function MetricBlock({ icon: Icon, label, value, unit, color }: { icon: any; lab
 }
 
 function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number; history: HistoryPayload | null }) {
-  const isAlert = typeof sensor.temperature === "number" && (sensor.temperature < 21.5 || sensor.temperature > 25);
+  const isAlert = !!sensor.alarm_type;
   const statusTone = isAlert ? "text-warning" : "text-success";
   const statusLabel = isAlert ? "Atenção" : "Online";
   return (
@@ -789,7 +913,7 @@ function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number;
 function SensorsView({ sensors, history }: { sensors: Sensor[]; history: HistoryPayload | null }) {
   const values = sensors.length ? sensors : sensorRegistry;
   const stats = calculateDailySensorStats(values, history);
-  const activeAlarms = values.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).length;
+  const activeAlarms = values.filter((s) => !!s.alarm_type).length;
 
   return (
     <>
@@ -823,9 +947,9 @@ function HistoryView({ period, setPeriod, history }: { period: Period; setPeriod
   return <><PageHeader title="Histórico" description="Séries temporais vindas do PostgreSQL por período, sensor e grandeza."><PeriodSelect value={period} onChange={setPeriod} /></PageHeader><section className="grid grid-cols-1 md:grid-cols-3 gap-4"><ChartCard title="Temperatura" type="temp" data={series} /><ChartCard title="Umidade" type="humidity" data={series} /><ChartCard title="CO₂" type="co2" data={series} /></section><div className="glass-strong rounded-2xl p-4"><div className="text-sm font-medium mb-3">Amostras recentes</div><div className="grid grid-cols-1 md:grid-cols-4 gap-3">{series.slice(-8).map((p) => <div key={p.t} className="p-3 rounded-xl bg-white/[0.03] border border-white/5"><div className="text-xs text-muted-foreground">{p.t}</div><div className="text-xl font-semibold">{formatDecimal(p.temp)} °C</div><div className="text-xs text-muted-foreground">{formatDecimal(p.h,0)}% • {formatInt(p.c)} ppm</div></div>)}</div></div></>;
 }
 
-function AlarmsView({ alarms, sensors }: { alarms: any[]; sensors: Sensor[] }) {
-  const active = alarms.length ? alarms : sensors.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).map((s) => ({ sensor_id: s.sensor_id, area: s.area, value: s.temperature, type: s.temperature! < 21.5 ? "temperature_low" : "temperature_high", timestamp: s.timestamp }));
-  return <><PageHeader title="Alarmes" description="Gestão de desvios: frio abaixo de 21,5 °C e quente acima de 25 °C." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={AlertTriangle} label="Ativos" value={active.length} /><MiniStat icon={Thermometer} label="Limite frio" value="21,5 °C" /><MiniStat icon={Thermometer} label="Limite quente" value="25,0 °C" /><MiniStat icon={ShieldCheck} label="Normalização" value="Auto" /></section><RecentAlerts alarms={active} /></>;
+function AlarmsView({ alarms, sensors, settings }: { alarms: any[]; sensors: Sensor[]; settings: AlarmSettings }) {
+  const active = alarms.length ? alarms : buildAlarmsFromSensors(sensors, settings);
+  return <><PageHeader title="Alarmes" description="Gestão de desvios conforme limites configurados para temperatura, umidade e CO₂." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={AlertTriangle} label="Ativos" value={active.length} /><MiniStat icon={Thermometer} label="Temp. baixa/alta" value={`${formatDecimal(settings.temperature_low)} / ${formatDecimal(settings.temperature_high)} °C`} /><MiniStat icon={Droplets} label="Umid. baixa/alta" value={`${formatDecimal(settings.humidity_low, 0)} / ${formatDecimal(settings.humidity_high, 0)} %`} /><MiniStat icon={Cloud} label="CO₂ baixo/alto" value={`${formatInt(settings.co2_low)} / ${formatInt(settings.co2_high)} ppm`} /></section><RecentAlerts alarms={active} /></>;
 }
 
 function InsightsView({ dashboard }: { dashboard: DashboardPayload; history: HistoryPayload | null }) {
@@ -839,27 +963,23 @@ function ReportsView() {
 }
 
 function NetworkView({ sensors }: { sensors: Sensor[] }) {
-  const avgRssi = sensors.reduce((a,s)=>a+(s.rssi||0),0)/Math.max(1,sensors.length);
-  const avgSnr = sensors.reduce((a,s)=>a+(s.snr||0),0)/Math.max(1,sensors.length);
-  return <><PageHeader title="Saúde da Rede" description="Monitoramento LoRaWAN do UG56, qualidade de sinal e comunicação dos AM103." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Server} label="Gateway" value="UG56-915M" /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value="100%" /></section><SensorsView sensors={sensors} history={null} /></>;
+  const rssiValues = sensors.map((s)=>s.rssi).filter((v): v is number => typeof v === "number");
+  const snrValues = sensors.map((s)=>s.snr).filter((v): v is number => typeof v === "number");
+  const batteryValues = sensors.map((s)=>s.battery).filter((v): v is number => typeof v === "number");
+  const avgRssi = rssiValues.length ? rssiValues.reduce((a,s)=>a+s,0)/rssiValues.length : null;
+  const avgSnr = snrValues.length ? snrValues.reduce((a,s)=>a+s,0)/snrValues.length : null;
+  const avgBattery = batteryValues.length ? batteryValues.reduce((a,s)=>a+s,0)/batteryValues.length : null;
+  return <><PageHeader title="Saúde da Rede" description="Monitoramento LoRaWAN do UG56, qualidade de sinal e comunicação dos sensores Milesight." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Server} label="Gateway" value="UG56-915M" /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(avgBattery)}%`} /></section><SensorsView sensors={sensors} history={null} /></>;
 }
 
-function SettingsView({ sensors }: { sensors: Sensor[] }) {
-  const [settings, setSettings] = useState({
-    temperature_low: 21.5,
-    temperature_high: 25,
-    humidity_low: 35,
-    humidity_high: 65,
-    co2_low: 400,
-    co2_high: 1000,
-  });
+function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void }) {
+  const [settings, setSettings] = useState<AlarmSettings>(initialSettings);
   const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
-    fetchJSON<any>(`${N8N_BASE}/fleury-settings`, { ok: false, settings })
-      .then((payload) => {
-        if (payload?.settings) setSettings((prev) => ({ ...prev, ...payload.settings }));
-      });
+    fetchJSON<any>(`${N8N_BASE}/fleury-settings`)
+      .then((payload) => setSettings(normalizeSettings(payload)))
+      .catch(() => setStatus("Não foi possível carregar os limites atuais do n8n."));
   }, []);
 
   const update = (key: keyof typeof settings, value: string) => {
@@ -875,6 +995,7 @@ function SettingsView({ sensors }: { sensors: Sensor[] }) {
         body: JSON.stringify(settings),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      onSettingsSaved(settings);
       setStatus("Limites enviados ao n8n e salvos no PostgreSQL/Redis.");
     } catch {
       setStatus("Não foi possível salvar agora. Verifique o workflow fleury-settings no n8n.");
