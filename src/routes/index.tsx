@@ -519,15 +519,9 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   return (
-    <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0 flex flex-col">
-      <div className="flex items-center justify-between mb-1.5 shrink-0">
-        <div className="glass rounded-xl px-3 py-1.5 text-sm flex items-center gap-2">
-          <Box className="h-4 w-4 text-info" /> Modelo 3D Operacional
-        </div>
-        <div className="text-xs text-muted-foreground">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
-      </div>
-
-      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0a1428] flex-1 min-h-0">
+    <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
+      <div className="absolute right-4 top-3 z-10 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
+      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#0a1428] h-full min-h-0">
         <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain" width={1600} height={960} />
         <div className="absolute inset-0 mix-blend-screen opacity-55 transition-opacity duration-700" style={{ background: layer === "temperature" ? "radial-gradient(circle at 68% 58%, rgba(239,68,68,.75), transparent 18%), radial-gradient(circle at 18% 78%, rgba(37,99,235,.55), transparent 23%), radial-gradient(circle at 50% 65%, rgba(250,204,21,.45), transparent 24%), radial-gradient(circle at 58% 42%, rgba(34,197,94,.38), transparent 20%)" : layer === "humidity" ? "radial-gradient(circle at 40% 60%, rgba(56,189,248,.55), transparent 25%), radial-gradient(circle at 70% 35%, rgba(34,197,94,.50), transparent 28%), radial-gradient(circle at 88% 62%, rgba(249,115,22,.35), transparent 20%)" : "radial-gradient(circle at 68% 58%, rgba(239,68,68,.50), transparent 22%), radial-gradient(circle at 62% 78%, rgba(250,204,21,.38), transparent 22%), radial-gradient(circle at 18% 78%, rgba(34,197,94,.45), transparent 25%)" }} />
         <LayerSelector layer={layer} onChange={onLayerChange} />
@@ -589,7 +583,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
         <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta="AM103 via LoRaWAN" deltaTone="down" color="#22c55e" seed={5} />
         <KpiCard label="Conforto ambiental" value={`${comfort}`} unit="%" delta={`${data.kpis.activeAlarms} alarmes ativos`} color="#ef4444" seed={6} critical={data.kpis.activeAlarms > 0} />
       </section>
-      <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-2.5 h-[38vh] min-h-[350px] max-h-[430px] shrink-0">
+      <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[1fr_300px] gap-2.5 h-[55vh] min-h-[520px] max-h-[660px] shrink-0">
         <DigitalTwinMap sensors={heatmapSensors} layer={layer} period={period} onLayerChange={setLayer} onSelectSensor={setSelectedSensor} />
         <SensorDetail sensor={selectedSensor || heatmapSensors[5]} series={series} />
       </section>
@@ -612,13 +606,13 @@ function Header({ period, setPeriod, updatedAt, alarms }: { period: Period; setP
 function ChartsAndInsights({ series, dashboard, period }: { series: any[]; dashboard: DashboardPayload; period: Period }) {
   const topSensor = [...dashboard.sensors].sort((a, b) => (b.temperature || 0) - (a.temperature || 0))[0];
   return (
-    <section className="dashboard-charts grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-3 shrink-0">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+    <section className="dashboard-charts grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-2.5 shrink-0">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
         <ChartCard title={`Temperatura (${periodLabel[period]})`} type="temp" data={series} />
         <ChartCard title={`Umidade Relativa (${periodLabel[period]})`} type="humidity" data={series} />
         <ChartCard title={`CO₂ (${periodLabel[period]})`} type="co2" data={series} />
       </div>
-      <div className="glass-strong rounded-2xl p-3 flex flex-col gap-2 min-w-0"><div className="flex items-center gap-2"><Brain className="h-4 w-4 text-info" /><div className="text-sm font-semibold">Insights Inteligentes</div></div>{[
+      <div className="glass-strong rounded-2xl p-2.5 flex flex-col gap-1.5 min-w-0"><div className="flex items-center gap-2"><Brain className="h-4 w-4 text-info" /><div className="text-sm font-semibold">Insights Inteligentes</div></div>{[
         { icon: Thermometer, color: "text-warning", text: `${topSensor?.area || "Área crítica"} está com a maior temperatura média do período.` },
         { icon: Cloud, color: "text-critical", text: `CO₂ médio atual: ${formatInt(dashboard.kpis.co2Avg)} ppm nos sensores online.` },
         { icon: Droplets, color: "text-info", text: `Umidade média em ${formatDecimal(dashboard.kpis.humidityAvg, 0)}%, usando histórico do PostgreSQL.` },
@@ -629,7 +623,10 @@ function ChartsAndInsights({ series, dashboard, period }: { series: any[]; dashb
 
 function ChartCard({ title, type, data }: { title: string; type: "temp" | "humidity" | "co2"; data: any[] }) {
   const isTemp = type === "temp", isHum = type === "humidity";
-  return <div className="glass-strong rounded-2xl p-3 min-w-0"><div className="text-xs font-medium mb-1.5">{title}</div><div className="h-20 2xl:h-24"><ResponsiveContainer><AreaChart data={data}><defs><linearGradient id={`g-${type}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={isTemp ? "#ef4444" : isHum ? "#38bdf8" : "#22c55e"} stopOpacity={0.5} /><stop offset="100%" stopColor={isTemp ? "#ef4444" : isHum ? "#38bdf8" : "#22c55e"} stopOpacity={0} /></linearGradient></defs><XAxis dataKey="t" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} domain={isTemp ? [18, 30] : isHum ? [0, 100] : [0, 1500]} width={34} />{isTemp && <><ReferenceArea y1={21.5} y2={25} fill="#22c55e" fillOpacity={0.10} /><Line type="monotone" dataKey="min" stroke="#94a3b8" strokeDasharray="3 3" strokeWidth={1} dot={false} /></>}{isHum && <ReferenceArea y1={40} y2={60} fill="#22c55e" fillOpacity={0.12} />}{type === "co2" && <ReferenceArea y1={1000} y2={1500} fill="#ef4444" fillOpacity={0.15} />}<Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} /><Area type="monotone" dataKey={isTemp ? "temp" : isHum ? "h" : "c"} stroke={isTemp ? "#ef4444" : isHum ? "#38bdf8" : "#22c55e"} strokeWidth={2} fill={`url(#g-${type})`} isAnimationActive /></AreaChart></ResponsiveContainer></div></div>;
+  const Icon = isTemp ? Thermometer : isHum ? Droplets : Cloud;
+  const color = isTemp ? "#ef4444" : isHum ? "#38bdf8" : "#22c55e";
+  const labelColor = isTemp ? "text-critical" : isHum ? "text-info" : "text-success";
+  return <div className="glass-strong rounded-2xl p-2.5 min-w-0"><div className="flex items-center gap-2 text-xs font-medium mb-1"><span className="h-6 w-6 rounded-lg bg-white/5 grid place-items-center"><Icon className={`h-3.5 w-3.5 ${labelColor}`} /></span><span>{title}</span></div><div className="h-16 2xl:h-20"><ResponsiveContainer><AreaChart data={data} margin={{ top: 2, right: 4, left: 0, bottom: 0 }}><defs><linearGradient id={`g-${type}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity={0.5} /><stop offset="100%" stopColor={color} stopOpacity={0} /></linearGradient></defs><XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={isTemp ? [18, 30] : isHum ? [0, 100] : [0, 1500]} width={28} />{isTemp && <><ReferenceArea y1={21.5} y2={25} fill="#22c55e" fillOpacity={0.10} /><Line type="monotone" dataKey="min" stroke="#94a3b8" strokeDasharray="3 3" strokeWidth={1} dot={false} /></>}{isHum && <ReferenceArea y1={40} y2={60} fill="#22c55e" fillOpacity={0.12} />}{type === "co2" && <ReferenceArea y1={1000} y2={1500} fill="#ef4444" fillOpacity={0.15} />}<Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 12 }} /><Area type="monotone" dataKey={isTemp ? "temp" : isHum ? "h" : "c"} stroke={color} strokeWidth={2} fill={`url(#g-${type})`} isAnimationActive /></AreaChart></ResponsiveContainer></div></div>;
 }
 
 function RecentAlerts({ alarms }: { alarms: any[] }) {

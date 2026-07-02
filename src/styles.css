@@ -161,7 +161,13 @@
 
   @media (min-width: 1600px) and (min-height: 1000px) {
     .dashboard-kpis { gap: 0.55rem; }
-    .dashboard-charts { max-height: 150px; }
+    .dashboard-charts { max-height: 118px; }
     .dashboard-charts .glass-strong { min-height: 0; }
     .dashboard-alerts { min-height: 58px; }
   }
+
+
+@media (min-width: 1600px) and (min-height: 1000px) {
+  .dashboard-main-grid { height: clamp(520px, 55vh, 660px); }
+  .dashboard-charts .glass-strong { padding-block: 0.6rem; }
+}
