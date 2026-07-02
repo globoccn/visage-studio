@@ -113,7 +113,7 @@ type HistoryPayload = {
   records: HistoryRecord[];
 };
 
-const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://ancar-n8n.gpfgqx.easypanel.host/webhook";
+const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://fleury-bh-n8n.gpfgqx.easypanel.host/webhook";
 
 const periodLabel: Record<Period, string> = {
   today: "Hoje",
@@ -845,7 +845,53 @@ function NetworkView({ sensors }: { sensors: Sensor[] }) {
 }
 
 function SettingsView({ sensors }: { sensors: Sensor[] }) {
-  return <><PageHeader title="Configurações" description="Cadastro dos sensores, coordenadas da planta, limites e integração com n8n/PostgreSQL."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Limites ambientais</div><div className="grid grid-cols-2 gap-3"><MiniSetting label="Frio abaixo de" value="21,5 °C" /><MiniSetting label="Quente acima de" value="25,0 °C" /><MiniSetting label="Atualização tela" value="5 min" /><MiniSetting label="Histórico" value="PostgreSQL" /></div></div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Integrações</div><div className="space-y-3 text-sm text-muted-foreground"><div>Gateway: <span className="text-foreground">UG56-915M</span></div><div>Endpoint: <span className="text-foreground">/webhook/fleury-test</span></div><div>Sensor: <span className="text-foreground">Milesight AM103</span></div><div>Total previsto: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
+  const [settings, setSettings] = useState({
+    temperature_low: 21.5,
+    temperature_high: 25,
+    humidity_low: 35,
+    humidity_high: 65,
+    co2_low: 400,
+    co2_high: 1000,
+  });
+  const [status, setStatus] = useState<string>("");
+
+  useEffect(() => {
+    fetchJSON<any>(`${N8N_BASE}/fleury-settings`, { ok: false, settings })
+      .then((payload) => {
+        if (payload?.settings) setSettings((prev) => ({ ...prev, ...payload.settings }));
+      });
+  }, []);
+
+  const update = (key: keyof typeof settings, value: string) => {
+    setSettings((prev) => ({ ...prev, [key]: Number(value) }));
+  };
+
+  const save = async () => {
+    setStatus("Salvando...");
+    try {
+      const res = await fetch(`${N8N_BASE}/fleury-settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus("Limites enviados ao n8n e salvos no PostgreSQL/Redis.");
+    } catch {
+      setStatus("Não foi possível salvar agora. Verifique o workflow fleury-settings no n8n.");
+    }
+  };
+
+  const Field = ({ label, k, unit }: { label: string; k: keyof typeof settings; unit: string }) => (
+    <label className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div className="flex items-center gap-2">
+        <input className="w-full bg-transparent border border-white/10 rounded-lg px-2 py-1 text-lg font-semibold outline-none" type="number" step="0.1" value={settings[k]} onChange={(e) => update(k, e.target.value)} />
+        <span className="text-xs text-muted-foreground">{unit}</span>
+      </div>
+    </label>
+  );
+
+  return <><PageHeader title="Configurações" description="Limites de alarmes enviados ao n8n e associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Limites ambientais</div><div className="grid grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ baixo" k="co2_low" unit="ppm" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Integrações</div><div className="space-y-3 text-sm text-muted-foreground"><div>Gateway: <span className="text-foreground">UG56-915M</span></div><div>Endpoint gateway: <span className="text-foreground">/webhook/fleury-milesight-test</span></div><div>Base frontend: <span className="text-foreground">https://fleury-bh-n8n.gpfgqx.easypanel.host</span></div><div>Sensores: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Persistência PostgreSQL: <span className="text-foreground">a cada 10 minutos</span></div><div>Total previsto: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
 }
 
 function MiniStat({ icon: Icon, label, value }: { icon: any; label: string; value: any }) { return <div className="glass-strong rounded-2xl p-3"><Icon className="h-4 w-4 text-info mb-2" /><div className="text-[11px] text-muted-foreground">{label}</div><div className="text-xl 2xl:text-2xl font-semibold mt-0.5">{value}</div></div>; }
