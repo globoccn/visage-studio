@@ -440,6 +440,83 @@ async function fetchJSON<T>(url: string): Promise<T> {
   return await parseResponseJSON<T>(res, url);
 }
 
+
+function numberOrNull(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeSensor(raw: any): Sensor {
+  const devEui = String(raw?.dev_eui || raw?.devEUI || raw?.deviceEUI || "").toUpperCase();
+  const base = sensorRegistry.find((sensor) => sensor.dev_eui === devEui || sensor.sensor_id === raw?.sensor_id) || sensorRegistry.find((sensor) => sensor.sensor_id === raw?.sensor_id);
+  return {
+    ...(base || sensorRegistry[0]),
+    ...raw,
+    dev_eui: devEui || raw?.dev_eui || base?.dev_eui || "",
+    sensor_id: raw?.sensor_id || base?.sensor_id || devEui,
+    sensor_name: raw?.sensor_name || base?.sensor_name || raw?.sensor_id || devEui,
+    area: raw?.area || base?.area || "Sem cadastro",
+    floor: raw?.floor || base?.floor || "Térreo",
+    x: numberOrNull(raw?.x ?? base?.x),
+    y: numberOrNull(raw?.y ?? base?.y),
+    temperature: numberOrNull(raw?.temperature),
+    humidity: numberOrNull(raw?.humidity),
+    co2: numberOrNull(raw?.co2),
+    battery: numberOrNull(raw?.battery),
+    rssi: numberOrNull(raw?.rssi),
+    snr: numberOrNull(raw?.snr),
+    timestamp: raw?.timestamp || raw?.reading_time || raw?.received_at || base?.timestamp,
+  };
+}
+
+function normalizeDashboard(payload: any): DashboardPayload {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const sensors = Array.isArray(source.sensors) ? source.sensors.map(normalizeSensor) : sensorRegistry;
+  const online = sensors.filter((sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number").length;
+  const kpis = source.kpis || {};
+  return {
+    ok: source.ok !== false,
+    updatedAt: source.updatedAt || source.updated_at || "",
+    refreshSeconds: Number(source.refreshSeconds || source.refresh_seconds || 300),
+    expectedSensors: Number(source.expectedSensors || source.expected_sensors || sensorRegistry.length),
+    sensorsOnline: Number(source.sensorsOnline ?? source.sensors_online ?? online),
+    sensors,
+    alarms: Array.isArray(source.alarms) ? source.alarms : [],
+    kpis: {
+      temperatureAvg: numberOrNull(kpis.temperatureAvg ?? kpis.temperature_avg),
+      temperatureMin: numberOrNull(kpis.temperatureMin ?? kpis.temperature_min),
+      temperatureMax: numberOrNull(kpis.temperatureMax ?? kpis.temperature_max),
+      humidityAvg: numberOrNull(kpis.humidityAvg ?? kpis.humidity_avg),
+      co2Avg: numberOrNull(kpis.co2Avg ?? kpis.co2_avg),
+      activeAlarms: Number(kpis.activeAlarms ?? kpis.active_alarms ?? 0),
+    },
+  };
+}
+
+function periodStart(period: Period) {
+  const start = new Date();
+  if (period === "today") start.setHours(0, 0, 0, 0);
+  else if (period === "week") start.setDate(start.getDate() - 7);
+  else start.setDate(start.getDate() - 30);
+  return start;
+}
+
+function normalizeHistory(payload: any, period: Period): HistoryPayload {
+  const source = payload && typeof payload === "object" ? payload : {};
+  const rawRecords = Array.isArray(payload) ? payload : Array.isArray(source.records) ? source.records : Array.isArray(source.data) ? source.data : Array.isArray(source.history) ? source.history : [];
+  const start = periodStart(period).getTime();
+  const records = rawRecords
+    .map((record: any) => ({ ...normalizeSensor(record), reading_time: record?.reading_time || record?.timestamp }))
+    .filter((record: HistoryRecord) => {
+      const time = record.reading_time || record.timestamp;
+      if (!time) return false;
+      const t = new Date(time).getTime();
+      return Number.isFinite(t) && t >= start;
+    });
+  return { ok: source.ok !== false, count: records.length, records };
+}
+
 function emptyDashboard(): DashboardPayload {
   return {
     ok: false,
@@ -814,33 +891,50 @@ function App() {
     let mounted = true;
     const load = async () => {
       setApiState((prev) => ({ ...prev, loading: true }));
-      const historyUrl = `${N8N_BASE}/fleury-history?period=${encodeURIComponent(periodQuery[period])}&sensor=all&limit=5000`;
-      try {
-        const settingsPayload = await fetchJSON<any>(`${N8N_BASE}/fleury-settings`).catch(() => null);
-        const nextSettings = settingsPayload ? normalizeSettings(settingsPayload) : settings;
-        const hist = await fetchJSON<HistoryPayload>(historyUrl);
-        const dash = period === "today"
-          ? await fetchJSON<DashboardPayload>(`${N8N_BASE}/fleury-dashboard-latest`)
-          : makeDashboardFromHistory(hist, period, nextSettings);
-        if (!mounted) return;
-        setSettings(nextSettings);
-        setHistory(hist);
-        setDashboard(applyAlarmSettings(dash, nextSettings));
-        setApiState({ loading: false, error: null });
-      } catch (error: any) {
-        if (!mounted) return;
-        if (ENABLE_MOCKS) {
-          const hist = makeMockHistory(period);
-          const dash = period === "today" ? makeMockDashboard(period) : makeDashboardFromHistory(hist, period, settings);
-          setHistory(hist);
-          setDashboard(applyAlarmSettings(dash, settings));
-          setApiState({ loading: false, error: "n8n indisponível; exibindo dados mockados por VITE_ENABLE_MOCKS=true." });
-        } else {
-          setHistory(emptyHistory());
-          setDashboard(emptyDashboard());
-          setApiState({ loading: false, error: error?.message || "Falha ao carregar dados do n8n." });
-        }
+      const errors: string[] = [];
+      const historyUrl = `${N8N_BASE}/fleury-history?period=${encodeURIComponent(periodQuery[period])}&sensor=all&limit=20000`;
+
+      const settingsPayload = await fetchJSON<any>(`${N8N_BASE}/fleury-settings`).catch((error) => {
+        errors.push(error?.message || "Falha ao carregar configurações");
+        return null;
+      });
+      const nextSettings = settingsPayload ? normalizeSettings(settingsPayload) : settings;
+
+      let hist = emptyHistory();
+      const historyPayload = await fetchJSON<any>(historyUrl).catch((error) => {
+        errors.push(error?.message || "Falha ao carregar histórico");
+        return null;
+      });
+      if (historyPayload) hist = normalizeHistory(historyPayload, period);
+
+      let dash: DashboardPayload | null = null;
+      if (period === "today") {
+        const dashboardPayload = await fetchJSON<any>(`${N8N_BASE}/fleury-dashboard-latest`).catch((error) => {
+          errors.push(error?.message || "Falha ao carregar dashboard em tempo real");
+          return null;
+        });
+        dash = dashboardPayload ? normalizeDashboard(dashboardPayload) : null;
       }
+
+      if (!dash) {
+        dash = hist.records.length ? makeDashboardFromHistory(hist, period, nextSettings) : emptyDashboard();
+      }
+
+      if (!mounted) return;
+      if (ENABLE_MOCKS && errors.length && !hist.records.length && !dash.sensors.some((sensor) => typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number")) {
+        const mockHist = makeMockHistory(period);
+        const mockDash = period === "today" ? makeMockDashboard(period) : makeDashboardFromHistory(mockHist, period, nextSettings);
+        setSettings(nextSettings);
+        setHistory(mockHist);
+        setDashboard(applyAlarmSettings(mockDash, nextSettings));
+        setApiState({ loading: false, error: "n8n indisponível; exibindo dados mockados por VITE_ENABLE_MOCKS=true." });
+        return;
+      }
+
+      setSettings(nextSettings);
+      setHistory(hist);
+      setDashboard(applyAlarmSettings(dash, nextSettings));
+      setApiState({ loading: false, error: errors.length ? `Integração n8n: ${errors.join(" | ")}` : null });
     };
     load();
     const timer = setInterval(load, 5 * 60 * 1000);
