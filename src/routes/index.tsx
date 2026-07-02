@@ -11,7 +11,6 @@ import {
   Thermometer,
   Droplets,
   Cloud,
-  ChevronDown,
   MapPin,
   Brain,
   AlertTriangle,
@@ -481,7 +480,6 @@ function PeriodSelect({ value, onChange }: { value: Period; onChange: (p: Period
           <option value="month" className="bg-slate-900">Mês</option>
         </select>
       </div>
-      <ChevronDown className="h-4 w-4 text-muted-foreground" />
     </div>
   );
 }
@@ -574,7 +572,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
   const comfort = Math.max(0, Math.round(((data.expectedSensors - data.kpis.activeAlarms) / data.expectedSensors) * 100));
   return (
     <>
-      <Header period={period} setPeriod={setPeriod} updatedAt={data.updatedAt} alarms={data.kpis.activeAlarms} />
+      <Header period={period} setPeriod={setPeriod} updatedAt={data.updatedAt} alarms={data.kpis.activeAlarms} onNavigate={onNavigate} />
       <section className="dashboard-kpis grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 shrink-0 relative z-10">
         <KpiCard label="Temp. média" value={formatDecimal(data.kpis.temperatureAvg)} unit="°C" delta={`${periodLabel[period]} operacional`} deltaTone="up" color="#60a5fa" seed={1} />
         <KpiCard label="Temp. mín." value={formatDecimal(data.kpis.temperatureMin)} unit="°C" delta="Limite frio 21,5 °C" deltaTone="down" color="#22d3ee" seed={2} />
@@ -593,18 +591,25 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
   );
 }
 
-function Header({ period, setPeriod, updatedAt, alarms }: { period: Period; setPeriod: (p: Period) => void; updatedAt?: string; alarms: number }) {
+function Header({ period, setPeriod, updatedAt, alarms, onNavigate }: { period: Period; setPeriod: (p: Period) => void; updatedAt?: string; alarms: number; onNavigate?: (view: View) => void }) {
   return (
     <header className="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-2.5 shrink-0 relative z-20">
       <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2.5 text-sm"><span>{new Date().toLocaleDateString("pt-BR")}</span><Clock className="h-4 w-4 text-muted-foreground" /><span className="font-medium">{new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span></div>
       <div className="glass rounded-2xl px-4 py-2 flex items-center gap-2.5 justify-center"><span className="relative flex h-2.5 w-2.5"><span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" /><span className="relative rounded-full h-2.5 w-2.5 bg-success" /></span><div className="text-sm"><span className="text-muted-foreground">Status geral </span><span className="font-semibold text-success">Operacional</span><span className="text-muted-foreground ml-3">Atualizado {updatedAt ? new Date(updatedAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--"}</span></div></div>
-      <div className="flex items-center gap-3"><PeriodSelect value={period} onChange={setPeriod} /><button className="glass rounded-2xl p-2 relative"><Bell className="h-5 w-5" />{alarms > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-critical text-[10px] font-bold grid place-items-center">{alarms}</span>}</button></div>
+      <div className="flex items-center gap-3"><PeriodSelect value={period} onChange={setPeriod} /><button onClick={() => onNavigate?.("alarms")} title="Ver alarmes" className="glass rounded-2xl p-2 relative hover:border-critical/50 transition-colors"><Bell className="h-5 w-5" />{alarms > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-critical text-[10px] font-bold grid place-items-center">{alarms}</span>}</button></div>
     </header>
   );
 }
 
 function ChartsAndInsights({ series, dashboard, period, onNavigate }: { series: any[]; dashboard: DashboardPayload; period: Period; onNavigate?: (view: View) => void }) {
   const topSensor = [...dashboard.sensors].sort((a, b) => (b.temperature || 0) - (a.temperature || 0))[0];
+  const principalInsight = {
+    icon: Thermometer,
+    color: "text-warning",
+    text: `${topSensor?.area || "Área crítica"} está com a maior temperatura média do período.`,
+  };
+  const InsightIcon = principalInsight.icon;
+
   return (
     <section className="dashboard-charts grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 h-[146px] shrink-0 min-h-0">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 min-h-0">
@@ -612,11 +617,26 @@ function ChartsAndInsights({ series, dashboard, period, onNavigate }: { series: 
         <ChartCard title={`Umidade Relativa (${periodLabel[period]})`} type="humidity" data={series} />
         <ChartCard title={`CO₂ (${periodLabel[period]})`} type="co2" data={series} />
       </div>
-      <div className="glass-strong rounded-2xl p-2.5 flex flex-col gap-1.5 min-w-0"><div className="flex items-center gap-2"><Brain className="h-4 w-4 text-info" /><div className="text-sm font-semibold">Insights Inteligentes</div></div>{[
-        { icon: Thermometer, color: "text-warning", text: `${topSensor?.area || "Área crítica"} está com a maior temperatura média do período.` },
-        { icon: Cloud, color: "text-critical", text: `CO₂ médio atual: ${formatInt(dashboard.kpis.co2Avg)} ppm nos sensores online.` },
-        { icon: Droplets, color: "text-info", text: `Umidade média em ${formatDecimal(dashboard.kpis.humidityAvg, 0)}%, usando histórico do PostgreSQL.` },
-      ].map((it, i) => <div key={i} className="flex items-start gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5"><div className="h-7 w-7 rounded-lg bg-white/5 grid place-items-center shrink-0"><it.icon className={`h-4 w-4 ${it.color}`} /></div><div className="text-xs text-muted-foreground leading-relaxed">{it.text}</div></div>)}<button onClick={() => onNavigate?.("insights")} className="text-xs text-info hover:underline mt-auto self-start">Ver todas as análises →</button></div>
+
+      <div className="glass-strong rounded-2xl p-2.5 flex flex-col min-w-0 h-full overflow-hidden">
+        <div className="flex items-center gap-2 shrink-0">
+          <Brain className="h-4 w-4 text-info" />
+          <div className="text-sm font-semibold">Insights Inteligentes</div>
+        </div>
+
+        <div className="mt-2 flex-1 min-h-0 flex items-start gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 overflow-hidden">
+          <div className="h-7 w-7 rounded-lg bg-white/5 grid place-items-center shrink-0">
+            <InsightIcon className={`h-4 w-4 ${principalInsight.color}`} />
+          </div>
+          <div className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {principalInsight.text}
+          </div>
+        </div>
+
+        <button onClick={() => onNavigate?.("insights")} className="text-xs text-info hover:underline mt-2 self-start shrink-0">
+          Ver todas as análises →
+        </button>
+      </div>
     </section>
   );
 }

@@ -44,3 +44,10 @@ Endpoints usados:
 - Ajustar coordenadas x/y dos sensores na planta real.
 - Substituir imagem de planta por render/planta 3D final.
 - Ajustar payload da API caso o n8n retorne nomes diferentes.
+
+## Ajuste Home - insights e alarmes
+
+- Card Insights Inteligentes agora mostra apenas um insight na Home, com link direto para a aba Insights.
+- Sino de alertas no topo usa a contagem atual de alarmes ativos e navega para a aba Alarmes ao clicar.
+- Removida a seta extra do seletor de período.
+- Mantido vite.config.ts com allowedHosts fleury-bh.2see.io.
