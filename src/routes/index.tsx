@@ -218,21 +218,23 @@ const sensorRegistry: Sensor[] = [
 ];
 
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  "EM300-01": { x: 18, y: 70 },
-  "EM300-02": { x: 33, y: 56 },
-  "EM300-03": { x: 45, y: 55 },
-  "EM300-04": { x: 58, y: 57 },
-  "EM300-05": { x: 74, y: 66 },
-  "EM300-06": { x: 50, y: 42 },
-  "AM103L-07": { x: 23, y: 31 },
-  "AM103L-08": { x: 38, y: 35 },
-  "AM103L-09": { x: 54, y: 35 },
-  "AM103L-10": { x: 68, y: 35 },
-  "AM103L-11": { x: 13, y: 47 },
-  "AM103L-12": { x: 27, y: 47 },
-  "AM103L-13": { x: 42, y: 47 },
-  "AM103L-14": { x: 62, y: 45 },
-  "AM103L-15": { x: 82, y: 39 },
+  // Distribuição provisória mais aberta para a planta Fleury real.
+  // Estes pontos podem ser recalibrados quando o cliente definir a posição física dos sensores.
+  "EM300-01": { x: 16, y: 76 },
+  "EM300-02": { x: 34, y: 72 },
+  "EM300-03": { x: 50, y: 72 },
+  "EM300-04": { x: 67, y: 72 },
+  "EM300-05": { x: 84, y: 74 },
+  "EM300-06": { x: 56, y: 52 },
+  "AM103L-07": { x: 15, y: 18 },
+  "AM103L-08": { x: 34, y: 18 },
+  "AM103L-09": { x: 52, y: 18 },
+  "AM103L-10": { x: 75, y: 18 },
+  "AM103L-11": { x: 16, y: 43 },
+  "AM103L-12": { x: 34, y: 42 },
+  "AM103L-13": { x: 50, y: 43 },
+  "AM103L-14": { x: 67, y: 43 },
+  "AM103L-15": { x: 87, y: 41 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -305,7 +307,7 @@ function heatColor(layer: Layer, value: number, opacity = 0.58) {
   if (layer === "humidity") {
     if (value < 35) return `rgba(249,115,22,${opacity})`;
     if (value < 40) return `rgba(250,204,21,${opacity})`;
-    if (value <= 60) return `rgba(34,211,238,${opacity})`;
+    if (value <= 60) return `rgba(14,165,233,${opacity})`;
     if (value <= 65) return `rgba(34,197,94,${opacity})`;
     return `rgba(37,99,235,${opacity})`;
   }
@@ -318,8 +320,18 @@ function heatColor(layer: Layer, value: number, opacity = 0.58) {
   }
   if (value < 20.5) return `rgba(37,99,235,${opacity})`;
   if (value < 22.0) return `rgba(6,182,212,${opacity})`;
-  if (value < 24.0) return `rgba(34,197,94,${opacity})`;
+  if (value < 23.5) return `rgba(34,197,94,${opacity})`;
   if (value < 25.0) return `rgba(250,204,21,${opacity})`;
+  return `rgba(239,68,68,${opacity})`;
+}
+
+function heatColorByRatio(layer: Layer, value: number, opacity = 0.6) {
+  const ratio = layerRatio(layer, value);
+  if (ratio < 0.18) return `rgba(37,99,235,${opacity})`;
+  if (ratio < 0.36) return `rgba(14,165,233,${opacity})`;
+  if (ratio < 0.56) return `rgba(34,197,94,${opacity})`;
+  if (ratio < 0.75) return `rgba(250,204,21,${opacity})`;
+  if (ratio < 0.90) return `rgba(249,115,22,${opacity})`;
   return `rgba(239,68,68,${opacity})`;
 }
 
@@ -336,15 +348,25 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
     .filter((item): item is { sensor: Sensor; value: number } => typeof item.value === "number");
 
   if (!withValues.length) {
-    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.22), transparent 42%)";
+    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.26), rgba(34,197,94,.16) 34%, transparent 62%)";
   }
 
-  return withValues
-    .map(({ sensor, value }) => {
-      const { x, y } = mapPosition(sensor);
-      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.72)} 0%, ${heatColor(layer, value, 0.44)} 7%, ${heatColor(layer, value, 0.20)} 15%, transparent 27%)`;
-    })
-    .join(",");
+  const spots = withValues.map(({ sensor, value }) => {
+    const { x, y } = mapPosition(sensor);
+    const colorStrong = heatColorByRatio(layer, value, 0.86);
+    const colorMid = heatColorByRatio(layer, value, 0.42);
+    const colorSoft = heatColorByRatio(layer, value, 0.16);
+    return `radial-gradient(circle at ${x}% ${y}%, ${colorStrong} 0%, ${colorMid} 8%, ${colorSoft} 19%, transparent 34%)`;
+  });
+
+  // Camada ambiental ampla para evitar o aspecto de "filtro verde uniforme" quando os sensores estão próximos.
+  const ambient = [
+    "radial-gradient(ellipse at 18% 20%, rgba(37,99,235,.32) 0%, rgba(14,165,233,.22) 18%, transparent 44%)",
+    "radial-gradient(ellipse at 48% 44%, rgba(34,197,94,.25) 0%, rgba(132,204,22,.17) 24%, transparent 52%)",
+    "radial-gradient(ellipse at 78% 70%, rgba(250,204,21,.24) 0%, rgba(249,115,22,.17) 22%, transparent 50%)",
+  ];
+
+  return [...spots, ...ambient].join(",");
 }
 
 function formatDecimal(value: number | null | undefined, digits = 1) {
@@ -791,9 +813,9 @@ function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Lay
   return (
     <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-left outline-none">
       <div className="relative grid place-items-center">
-        <span className={`absolute h-8 w-8 rounded-full bg-gradient-to-br ${pinTone[tone]} opacity-35 blur-md transition-opacity group-hover:opacity-70`} />
-        <span className={`relative h-5 w-5 rounded-full bg-gradient-to-br ${pinTone[tone]} border border-white/70 shadow-lg transition-transform group-hover:scale-125`} />
-        <span className="absolute left-1/2 top-7 -translate-x-1/2 rounded-full border border-white/20 bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-white/90 shadow-lg backdrop-blur-sm">
+        <span className={`absolute h-7 w-7 rounded-full bg-gradient-to-br ${pinTone[tone]} opacity-40 blur-md transition-opacity group-hover:opacity-75`} />
+        <span className={`relative h-4 w-4 rounded-full bg-gradient-to-br ${pinTone[tone]} border border-white/70 shadow-lg ring-2 ring-white/10 transition-transform group-hover:scale-125`} />
+        <span className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full border border-white/15 bg-slate-950/78 px-1.5 py-0.5 text-[8px] font-bold text-white/90 shadow-lg backdrop-blur-sm">
           {shortId}
         </span>
         <span className="pointer-events-none absolute left-1/2 top-10 z-30 hidden min-w-[118px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/92 px-3 py-2 text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
@@ -869,11 +891,12 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 h-[98%] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 scale-[1.28] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
+          <div className="absolute left-1/2 top-1/2 w-[96%] max-w-[1120px] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
             <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-multiply opacity-70" style={{ ...heatmapMask, background: heatBackground, filter: "blur(8px) saturate(1.35)" }} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-45" style={{ ...heatmapMask, background: heatBackground, filter: "blur(20px) saturate(1.55)" }} />
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.03),transparent_55%)]" />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color opacity-78" style={{ ...heatmapMask, background: heatBackground, filter: "blur(10px) saturate(1.65) contrast(1.08)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-38" style={{ ...heatmapMask, background: heatBackground, filter: "blur(24px) saturate(1.85)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-24" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.20) 0 1px, transparent 1px 18px)", filter: "blur(.2px)" }} />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
             {activeSensors.map((s) => {
               const pos = mapPosition(s);
               return (
