@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Box,
@@ -263,6 +263,68 @@ const pinTone: Record<string, string> = {
   hot: "from-orange-400 to-red-600 shadow-[0_0_22px_rgba(239,68,68,0.85)]",
 };
 
+
+const layerRanges: Record<Layer, { min: number; max: number }> = {
+  temperature: { min: 18, max: 28 },
+  humidity: { min: 25, max: 75 },
+  co2: { min: 400, max: 1400 },
+};
+
+function clamp(value: number, min = 0, max = 1) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function layerRatio(layer: Layer, value: number) {
+  const range = layerRanges[layer];
+  return clamp((value - range.min) / (range.max - range.min));
+}
+
+function heatColor(layer: Layer, value: number, opacity = 0.58) {
+  const ratio = layerRatio(layer, value);
+  if (layer === "humidity") {
+    if (ratio < 0.28) return `rgba(249,115,22,${opacity})`;
+    if (ratio < 0.48) return `rgba(250,204,21,${opacity})`;
+    if (ratio < 0.72) return `rgba(34,197,94,${opacity})`;
+    return `rgba(56,189,248,${opacity})`;
+  }
+  if (layer === "co2") {
+    if (ratio < 0.25) return `rgba(34,197,94,${opacity})`;
+    if (ratio < 0.55) return `rgba(250,204,21,${opacity})`;
+    if (ratio < 0.75) return `rgba(249,115,22,${opacity})`;
+    return `rgba(239,68,68,${opacity})`;
+  }
+  if (ratio < 0.22) return `rgba(37,99,235,${opacity})`;
+  if (ratio < 0.42) return `rgba(6,182,212,${opacity})`;
+  if (ratio < 0.62) return `rgba(34,197,94,${opacity})`;
+  if (ratio < 0.80) return `rgba(250,204,21,${opacity})`;
+  return `rgba(239,68,68,${opacity})`;
+}
+
+function layerValueText(sensor: Sensor, layer: Layer) {
+  const value = valueForLayer(sensor, layer);
+  if (value === null) return "--";
+  return layer === "co2" ? `${formatInt(value)} ppm` : `${formatDecimal(value, 1)} ${layerConfig[layer].unit}`;
+}
+
+function heatmapBackground(sensors: Sensor[], layer: Layer) {
+  const withValues = sensors
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer) }))
+    .filter((item): item is { sensor: Sensor; value: number } => typeof item.value === "number");
+
+  if (!withValues.length) {
+    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.25), transparent 36%)";
+  }
+
+  return withValues
+    .map(({ sensor, value }) => {
+      const x = sensor.x ?? 50;
+      const y = sensor.y ?? 50;
+      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.72)} 0%, ${heatColor(layer, value, 0.40)} 9%, transparent 23%)`;
+    })
+    .join(",");
+}
+
 function formatDecimal(value: number | null | undefined, digits = 1) {
   if (typeof value !== "number" || Number.isNaN(value)) return "--";
   return value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -372,6 +434,28 @@ function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sen
     return {
       x: `${String(dt.getHours()).padStart(2, "0")}h`,
       y: Number((typeof value === "number" ? value : sensor[field] ?? 0).toFixed(field === "co2" ? 0 : 1)),
+    };
+  });
+}
+
+
+function buildSensorDetailSeries(history: HistoryPayload | null, sensor: Sensor, period: Period) {
+  const records = (history?.records || [])
+    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
+    .sort((a, b) => new Date(a.reading_time || a.timestamp || 0).getTime() - new Date(b.reading_time || b.timestamp || 0).getTime())
+    .slice(period === "today" ? -48 : -80);
+
+  const source = records.length
+    ? records
+    : [{ ...sensor, reading_time: sensor.timestamp || new Date().toISOString() } as HistoryRecord];
+
+  return source.map((r) => {
+    const dt = new Date(r.reading_time || r.timestamp || Date.now());
+    return {
+      t: period === "today" ? formatTimePt(dt) : formatDatePt(dt),
+      temp: typeof r.temperature === "number" ? Number(r.temperature.toFixed(1)) : null,
+      h: typeof r.humidity === "number" ? Number(r.humidity.toFixed(1)) : null,
+      c: typeof r.co2 === "number" ? Math.round(r.co2) : null,
     };
   });
 }
@@ -607,7 +691,8 @@ function applyAlarmSettings(dashboard: DashboardPayload, settings: AlarmSettings
 }
 
 function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number | string; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
-  const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
+  const reactId = useId().replace(/:/g, "");
+  const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}-${reactId}`;
   return (
     <ResponsiveContainer width="100%" height={34}>
       <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
@@ -617,13 +702,13 @@ function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true
             <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-        {showTooltip && (
+        {showTooltip && data.length > 1 && (
           <Tooltip
             cursor={{ stroke: color, strokeWidth: 1, opacity: 0.35 }}
             contentStyle={{ background: "#020817", border: "1px solid rgba(148,163,184,.28)", borderRadius: 10, fontSize: 11, boxShadow: "0 14px 40px rgba(0,0,0,.35)" }}
             labelStyle={{ color: "#94a3b8" }}
             formatter={(value: any) => [`${Number(value).toFixed(unit === "ppm" || unit === "%" ? 0 : 1)}${unit ? ` ${unit}` : ""}`, label]}
-            labelFormatter={(value) => `Amostra ${value}`}
+            labelFormatter={(value) => String(value)}
           />
         )}
         <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#${gid})`} isAnimationActive={false} />
@@ -674,13 +759,20 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label:
   );
 }
 
-function Pin({ id, tone, value, unit, onClick }: { id: string; tone: string; value?: string; unit?: string; onClick?: () => void }) {
+function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Layer; onClick?: () => void }) {
+  const disabledLayer = layer === "co2" && isEm300Sensor(sensor);
+  const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
+  const secondary = layer === "temperature" ? sensor.humidity : layer === "humidity" ? sensor.temperature : sensor.humidity;
+  const tone = disabledLayer || mainValue === null ? "neutral" : toneForSensor(sensor, layer);
+  const shortId = sensor.sensor_id.replace("AM103L-", "AM103L-").replace("EM300-", "EM300-");
+
   return (
-    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-full group">
-      <div className={`w-9 h-9 rounded-full bg-gradient-to-b ${pinTone[tone]} flex items-center justify-center text-[11px] font-bold text-white border border-white/40 transition-transform group-hover:scale-110`}>
-        {id.replace("S", "")}
+    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-left">
+      <div className={`min-w-[58px] rounded-lg bg-gradient-to-b ${pinTone[tone]} border border-white/35 px-2 py-1 text-white shadow-lg transition-transform group-hover:scale-105 group-hover:z-20`}>
+        <div className="text-[10px] font-bold leading-tight text-center drop-shadow-sm">{shortId}</div>
+        <div className="text-[12px] font-semibold leading-tight text-center tabular-nums">{mainValue === null ? "--" : layerValueText(sensor, layer)}</div>
+        {typeof secondary === "number" && <div className="text-[10px] leading-tight text-center text-white/90 tabular-nums">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</div>}
       </div>
-      {value && <div className="absolute left-1/2 -translate-x-1/2 top-9 whitespace-nowrap rounded-md bg-slate-950/80 border border-white/10 px-2 py-0.5 text-[10px] text-white opacity-0 group-hover:opacity-100">{value} {unit}</div>}
     </button>
   );
 }
@@ -732,34 +824,35 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 }
 
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
+  const activeSensors = sensors.length ? sensors : sensorRegistry;
+  const heatBackground = heatmapBackground(activeSensors, layer);
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
       <div className="absolute right-4 top-3 z-10 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#061126] h-full min-h-0">
         <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-cover object-center" width={1600} height={960} />
-        <div className="absolute inset-0 mix-blend-screen opacity-55 transition-opacity duration-700" style={{ background: layer === "temperature" ? "radial-gradient(circle at 68% 58%, rgba(239,68,68,.75), transparent 18%), radial-gradient(circle at 18% 78%, rgba(37,99,235,.55), transparent 23%), radial-gradient(circle at 50% 65%, rgba(250,204,21,.45), transparent 24%), radial-gradient(circle at 58% 42%, rgba(34,197,94,.38), transparent 20%)" : layer === "humidity" ? "radial-gradient(circle at 40% 60%, rgba(56,189,248,.55), transparent 25%), radial-gradient(circle at 70% 35%, rgba(34,197,94,.50), transparent 28%), radial-gradient(circle at 88% 62%, rgba(249,115,22,.35), transparent 20%)" : "radial-gradient(circle at 68% 58%, rgba(239,68,68,.50), transparent 22%), radial-gradient(circle at 62% 78%, rgba(250,204,21,.38), transparent 22%), radial-gradient(circle at 18% 78%, rgba(34,197,94,.45), transparent 25%)" }} />
+        <div className="absolute inset-0 mix-blend-screen opacity-65 transition-opacity duration-700" style={{ background: heatBackground }} />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,.08),transparent_62%)]" />
         <LayerSelector layer={layer} onChange={onLayerChange} />
-        {sensors.map((s) => {
-          const value = valueForLayer(s, layer);
-          return (
-            <div key={s.dev_eui || s.sensor_id} className="absolute" style={{ left: `${s.x ?? 50}%`, top: `${s.y ?? 50}%` }}>
-              <Pin id={s.sensor_id} tone={toneForSensor(s, layer)} value={value === null ? undefined : layer === "co2" ? formatInt(value) : formatDecimal(value, 1)} unit={layerConfig[layer].unit} onClick={() => onSelectSensor(s)} />
-            </div>
-          );
-        })}
+        {activeSensors.map((s) => (
+          <div key={s.dev_eui || s.sensor_id} className="absolute z-10" style={{ left: `${s.x ?? 50}%`, top: `${s.y ?? 50}%` }}>
+            <SensorMapBadge sensor={s} layer={layer} onClick={() => onSelectSensor(s)} />
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[] }) {
+function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; history: HistoryPayload | null; period: Period }) {
   const s = sensor || sensorRegistry[5];
   const isAlert = !!s.alarm_type;
   const em300 = isEm300Sensor(s);
+  const series = buildSensorDetailSeries(history, s, period);
   const metrics = [
-    { label: "Temperatura", value: `${formatDecimal(s.temperature)} °C`, color: "#ef4444", seed: 9 },
-    { label: "Umidade", value: `${formatDecimal(s.humidity)} %`, color: "#38bdf8", seed: 4 },
-    ...(em300 ? [] : [{ label: "CO₂", value: `${formatInt(s.co2)} ppm`, color: "#22c55e", seed: 7 }]),
+    { label: "Temperatura", value: `${formatDecimal(s.temperature)} °C`, color: "#ef4444", dataKey: "temp", unit: "°C" },
+    { label: "Umidade", value: `${formatDecimal(s.humidity)} %`, color: "#38bdf8", dataKey: "h", unit: "%" },
+    ...(em300 ? [] : [{ label: "CO₂", value: `${formatInt(s.co2)} ppm`, color: "#22c55e", dataKey: "c", unit: "ppm" }]),
   ];
 
   return (
@@ -770,9 +863,18 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
       </div>
       <div className="flex items-center gap-2 text-xs"><MapPin className="h-3.5 w-3.5 text-muted-foreground" /><div className="leading-tight"><div>{s.area}</div><div className="text-[10px] text-muted-foreground">{s.floor}</div></div></div>
       <div className="flex flex-col gap-1.5 pt-1">
-        {metrics.map((m) => (
-          <div key={m.label} className="grid grid-cols-[1fr_auto_72px] items-center gap-2"><div className="text-[11px] text-muted-foreground">{m.label}</div><div className="text-sm font-semibold tabular-nums">{m.value}</div><div className="h-6"><Sparkline data={spark(m.seed)} color={m.color} /></div></div>
-        ))}
+        {metrics.map((m) => {
+          const miniData = series
+            .map((row) => ({ x: row.t, y: Number((row as any)[m.dataKey]) }))
+            .filter((row) => Number.isFinite(row.y));
+          return (
+            <div key={m.label} className="grid grid-cols-[1fr_auto_72px] items-center gap-2">
+              <div className="text-[11px] text-muted-foreground">{m.label}</div>
+              <div className="text-sm font-semibold tabular-nums">{m.value}</div>
+              <div className="h-6"><Sparkline data={miniData} color={m.color} label={m.label} unit={m.unit} showTooltip={false} /></div>
+            </div>
+          );
+        })}
       </div>
       <div className="grid grid-cols-2 gap-y-1.5 text-xs pt-2 border-t border-white/10">
         <span className="text-muted-foreground">Status</span><span className="text-success text-right">Online</span>
@@ -782,7 +884,23 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
       </div>
       <div className="pt-2 mt-1.5 border-t border-white/10 flex-1 min-h-0 flex flex-col">
         <div className="text-[11px] text-muted-foreground mb-1.5">Tendência do período</div>
-        <div className="flex-1 min-h-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}><XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[18, 32]} ticks={[20,25,30]} tickFormatter={(v)=>`${v}°C`} width={30} />{!em300 && <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[200, 1200]} ticks={[500,1000]} tickFormatter={(v)=>`${v} ppm`} width={42} />}<Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} /><Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} isAnimationActive /><Line yAxisId="left" type="monotone" dataKey="h" stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive />{!em300 && <Line yAxisId="right" type="monotone" dataKey="c" stroke="#22c55e" strokeWidth={1.5} dot={false} isAnimationActive />}</LineChart></ResponsiveContainer></div>
+        <div className="flex-1 min-h-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
+              <XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+              <YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={["dataMin - 1", "dataMax + 1"]} tickFormatter={(v)=>`${v}°C`} width={30} />
+              {!em300 && <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={["dataMin - 80", "dataMax + 80"]} tickFormatter={(v)=>`${v} ppm`} width={42} />}
+              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} formatter={(value: any, name: any) => {
+                const labels: Record<string, string> = { temp: "Temperatura", h: "Umidade", c: "CO₂" };
+                const units: Record<string, string> = { temp: "°C", h: "%", c: "ppm" };
+                return [`${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: name === "c" ? 0 : 1 })} ${units[name] || ""}`, labels[name] || name];
+              }} />
+              <Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
+              <Line yAxisId="left" type="monotone" dataKey="h" stroke="#38bdf8" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
+              {!em300 && <Line yAxisId="right" type="monotone" dataKey="c" stroke="#22c55e" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
@@ -806,7 +924,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
       </section>
       <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 flex-1 min-h-0">
         <DigitalTwinMap sensors={heatmapSensors} layer={layer} period={period} onLayerChange={setLayer} onSelectSensor={setSelectedSensor} />
-        <SensorDetail sensor={selectedSensor || heatmapSensors[5]} series={series} />
+        <SensorDetail sensor={selectedSensor || heatmapSensors[5]} history={history} period={period} />
       </section>
       <ChartsAndInsights series={series} dashboard={data} period={period} onNavigate={onNavigate} />
       <RecentAlerts alarms={data.alarms} onNavigate={onNavigate} />
@@ -981,7 +1099,12 @@ function App() {
       <aside className="hidden lg:flex h-screen w-[220px] shrink-0 flex-col gap-4 px-4 py-4 border-r border-sidebar-border bg-sidebar/60 backdrop-blur-xl overflow-hidden">
         <div className="px-2"><div className="text-2xl font-black tracking-tight">FLEURY</div><div className="text-[9px] tracking-[0.25em] text-muted-foreground mt-0.5">MEDICINA E SAÚDE</div></div>
         <nav className="flex flex-col gap-0.5"><SidebarItem icon={LayoutDashboard} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} /><SidebarItem icon={Box} label="Planta Operacional" active={view === "plant"} onClick={() => setView("plant")} /><SidebarItem icon={Radio} label="Sensores" active={view === "sensors"} onClick={() => setView("sensors")} /><SidebarItem icon={History} label="Histórico" active={view === "history"} onClick={() => setView("history")} /><SidebarItem icon={Bell} label="Alarmes" active={view === "alarms"} onClick={() => setView("alarms")} /><SidebarItem icon={Brain} label="Insights" active={view === "insights"} onClick={() => setView("insights")} /><SidebarItem icon={FileText} label="Relatórios" active={view === "reports"} onClick={() => setView("reports")} /><SidebarItem icon={Wifi} label="Saúde da Rede" active={view === "network"} onClick={() => setView("network")} /><SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} /></nav>
-        <div className="mt-auto flex flex-col gap-3"><div className="glass rounded-2xl p-3.5"><img src={ccnLogo} alt="CCN Automação" className="w-28 max-w-full mb-3 opacity-95" /><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div></div><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div><div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div></div>
+        <div className="mt-auto flex flex-col gap-3">
+          <div className="px-2 pb-1"><img src={ccnLogo} alt="CCN Automação" className="w-36 max-w-full opacity-95" /></div>
+          <div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div></div>
+          <div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div>
+          <div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div>
+        </div>
       </aside>
       <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
         {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{apiState.error}</div>}
