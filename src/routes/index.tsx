@@ -45,13 +45,15 @@ import {
   CartesianGrid,
 } from "recharts";
 import floorPlan from "@/assets/floor-plan-heatmap.jpg";
-import sensorAm103 from "@/assets/am103.webp";
+import ccnLogo from "@/assets/ccn-logo-branco.png";
+import sensorEm300Image from "@/assets/em300-th.webp";
+import sensorAm103Image from "@/assets/amc103l.webp";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "Fleury — Supervisório Ambiental" },
-      { name: "description", content: "Digital Twin ambiental com AM103, UG56, Redis e PostgreSQL." },
+      { name: "description", content: "Supervisório ambiental para monitoramento de temperatura, umidade e CO₂." },
     ],
   }),
   component: App,
@@ -63,6 +65,7 @@ type View = "dashboard" | "plant" | "sensors" | "history" | "alarms" | "insights
 
 type Sensor = {
   dev_eui: string;
+  model?: string;
   sensor_id: string;
   sensor_name: string;
   area: string;
@@ -213,6 +216,19 @@ const sensorRegistry: Sensor[] = [
   { dev_eui: "24E124725F478688", sensor_id: "AM103L-14", sensor_name: "AM 103 L - 14", area: "Sala de Exames 02", floor: "Térreo", x: 64, y: 16, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
   { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Apoio", floor: "Térreo", x: 86, y: 28, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
+
+function isEm300Sensor(sensor: Sensor | null | undefined) {
+  const id = `${sensor?.model || ""} ${sensor?.sensor_id || ""} ${sensor?.sensor_name || ""}`.toUpperCase();
+  return id.includes("EM300");
+}
+
+function isAm103Sensor(sensor: Sensor | null | undefined) {
+  return !isEm300Sensor(sensor);
+}
+
+function sensorDisplayImage(sensor: Sensor) {
+  return isEm300Sensor(sensor) ? sensorEm300Image : sensorAm103Image;
+}
 
 function valueForLayer(sensor: Sensor, layer: Layer) {
   const value = sensor[layer];
@@ -428,7 +444,7 @@ async function parseResponseJSON<T>(res: Response, context: string): Promise<T> 
     if (context.includes("/fleury-history")) return { ok: true, count: 0, records: [] } as T;
     if (context.includes("/fleury-dashboard-latest")) return { ok: true, sensors: [], alarms: [], kpis: {}, expectedSensors: sensorRegistry.length, sensorsOnline: 0 } as T;
     if (context.includes("/fleury-settings")) return { ok: true, settings: DEFAULT_ALARM_SETTINGS } as T;
-    throw new Error(`${context}: resposta vazia do n8n`);
+    throw new Error(`${context}: resposta vazia`);
   }
   try {
     return JSON.parse(text) as T;
@@ -459,6 +475,7 @@ function normalizeSensor(raw: any): Sensor {
     dev_eui: devEui || raw?.dev_eui || base?.dev_eui || "",
     sensor_id: raw?.sensor_id || base?.sensor_id || devEui,
     sensor_name: raw?.sensor_name || base?.sensor_name || raw?.sensor_id || devEui,
+    model: raw?.model || base?.model || (String(raw?.sensor_id || base?.sensor_id || raw?.sensor_name || "").toUpperCase().includes("EM300") ? "EM300-TH" : "AM103L"),
     area: raw?.area || base?.area || "Sem cadastro",
     floor: raw?.floor || base?.floor || "Térreo",
     x: numberOrNull(raw?.x ?? base?.x),
@@ -589,7 +606,7 @@ function applyAlarmSettings(dashboard: DashboardPayload, settings: AlarmSettings
   };
 }
 
-function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
+function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number | string; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
   const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}`;
   return (
     <ResponsiveContainer width="100%" height={34}>
@@ -738,6 +755,13 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
 function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[] }) {
   const s = sensor || sensorRegistry[5];
   const isAlert = !!s.alarm_type;
+  const em300 = isEm300Sensor(s);
+  const metrics = [
+    { label: "Temperatura", value: `${formatDecimal(s.temperature)} °C`, color: "#ef4444", seed: 9 },
+    { label: "Umidade", value: `${formatDecimal(s.humidity)} %`, color: "#38bdf8", seed: 4 },
+    ...(em300 ? [] : [{ label: "CO₂", value: `${formatInt(s.co2)} ppm`, color: "#22c55e", seed: 7 }]),
+  ];
+
   return (
     <div className="dashboard-sensor-detail glass-strong rounded-2xl p-2.5 flex flex-col gap-1.5 min-w-0 h-full min-h-0">
       <div className="flex items-center justify-between">
@@ -746,7 +770,7 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
       </div>
       <div className="flex items-center gap-2 text-xs"><MapPin className="h-3.5 w-3.5 text-muted-foreground" /><div className="leading-tight"><div>{s.area}</div><div className="text-[10px] text-muted-foreground">{s.floor}</div></div></div>
       <div className="flex flex-col gap-1.5 pt-1">
-        {[{ label: "Temperatura", value: `${formatDecimal(s.temperature)} °C`, color: "#ef4444", seed: 9 }, { label: "Umidade", value: `${formatDecimal(s.humidity)} %`, color: "#38bdf8", seed: 4 }, { label: "CO₂", value: `${formatInt(s.co2)} ppm`, color: "#22c55e", seed: 7 }].map((m) => (
+        {metrics.map((m) => (
           <div key={m.label} className="grid grid-cols-[1fr_auto_72px] items-center gap-2"><div className="text-[11px] text-muted-foreground">{m.label}</div><div className="text-sm font-semibold tabular-nums">{m.value}</div><div className="h-6"><Sparkline data={spark(m.seed)} color={m.color} /></div></div>
         ))}
       </div>
@@ -758,13 +782,13 @@ function SensorDetail({ sensor, series }: { sensor: Sensor | null; series: any[]
       </div>
       <div className="pt-2 mt-1.5 border-t border-white/10 flex-1 min-h-0 flex flex-col">
         <div className="text-[11px] text-muted-foreground mb-1.5">Tendência do período</div>
-        <div className="flex-1 min-h-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}><XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[18, 32]} ticks={[20,25,30]} tickFormatter={(v)=>`${v}°C`} width={30} /><YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[200, 1200]} ticks={[500,1000]} tickFormatter={(v)=>`${v} ppm`} width={42} /><Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} /><Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} isAnimationActive /><Line yAxisId="left" type="monotone" dataKey="h" stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive /><Line yAxisId="right" type="monotone" dataKey="c" stroke="#22c55e" strokeWidth={1.5} dot={false} isAnimationActive /></LineChart></ResponsiveContainer></div>
+        <div className="flex-1 min-h-0"><ResponsiveContainer width="100%" height="100%"><LineChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}><XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" /><YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[18, 32]} ticks={[20,25,30]} tickFormatter={(v)=>`${v}°C`} width={30} />{!em300 && <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={[200, 1200]} ticks={[500,1000]} tickFormatter={(v)=>`${v} ppm`} width={42} />}<Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} /><Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} isAnimationActive /><Line yAxisId="left" type="monotone" dataKey="h" stroke="#38bdf8" strokeWidth={1.5} dot={false} isAnimationActive />{!em300 && <Line yAxisId="right" type="monotone" dataKey="c" stroke="#22c55e" strokeWidth={1.5} dot={false} isAnimationActive />}</LineChart></ResponsiveContainer></div>
       </div>
     </div>
   );
 }
 
-function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history, selectedSensor, setSelectedSensor, onNavigate }: { period: Period; setPeriod: (p: Period) => void; layer: Layer; setLayer: (l: Layer) => void; dashboard: DashboardPayload | null; history: HistoryPayload | null; selectedSensor: Sensor | null; setSelectedSensor: (s: Sensor) => void; onNavigate: (view: View) => void }) {
+function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history, selectedSensor, setSelectedSensor, onNavigate, settings }: { period: Period; setPeriod: (p: Period) => void; layer: Layer; setLayer: (l: Layer) => void; dashboard: DashboardPayload | null; history: HistoryPayload | null; selectedSensor: Sensor | null; setSelectedSensor: (s: Sensor) => void; onNavigate: (view: View) => void; settings: AlarmSettings }) {
   const data = dashboard || emptyDashboard();
   const series = useMemo(() => buildChartSeries(history, period), [history, period]);
   const heatmapSensors = useMemo(() => buildHeatmapSensors(period, dashboard, history), [period, dashboard, history]);
@@ -777,7 +801,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
         <KpiCard label="Temp. mín." value={formatDecimal(data.kpis.temperatureMin)} unit="°C" delta="Limite frio 21,5 °C" deltaTone="down" color="#22d3ee" seed={2} />
         <KpiCard label="Temp. máx." value={formatDecimal(data.kpis.temperatureMax)} unit="°C" delta="Limite quente 25,0 °C" deltaTone="warn" color="#f97316" seed={3} />
         <KpiCard label="Umidade média" value={formatDecimal(data.kpis.humidityAvg, 0)} unit="%" delta="Faixa ideal 40% - 60%" deltaTone="up" color="#38bdf8" seed={4} />
-        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta="AM103 via LoRaWAN" deltaTone="down" color="#22c55e" seed={5} />
+        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta={`Faixa ideal ${formatInt(settings.co2_low)} - ${formatInt(settings.co2_high)} ppm`} deltaTone="up" color="#22c55e" seed={5} />
         <KpiCard label="Conforto ambiental" value={`${comfort}`} unit="%" delta={`${data.kpis.activeAlarms} alarmes ativos`} color="#ef4444" seed={6} critical={data.kpis.activeAlarms > 0} />
       </section>
       <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 flex-1 min-h-0">
@@ -913,7 +937,7 @@ function App() {
       let dash: DashboardPayload | null = null;
       if (period === "today") {
         const dashboardPayload = await fetchJSON<any>(`${N8N_BASE}/fleury-dashboard-latest`).catch((error) => {
-          errors.push(error?.message || "Falha ao carregar dashboard em tempo real");
+          errors.push(error?.message || "Falha ao carregar dados atuais");
           return null;
         });
         dash = dashboardPayload ? normalizeDashboard(dashboardPayload) : null;
@@ -930,19 +954,25 @@ function App() {
         setSettings(nextSettings);
         setHistory(mockHist);
         setDashboard(applyAlarmSettings(mockDash, nextSettings));
-        setApiState({ loading: false, error: "n8n indisponível; exibindo dados mockados por VITE_ENABLE_MOCKS=true." });
+        setApiState({ loading: false, error: "Dados temporariamente indisponíveis; exibindo modo de demonstração." });
         return;
       }
 
       setSettings(nextSettings);
       setHistory(hist);
       setDashboard(applyAlarmSettings(dash, nextSettings));
-      setApiState({ loading: false, error: errors.length ? `Integração n8n: ${errors.join(" | ")}` : null });
+      setApiState({ loading: false, error: errors.length ? `Dados parcialmente indisponíveis: ${errors.join(" | ")}` : null });
     };
     load();
     const timer = setInterval(load, 5 * 60 * 1000);
     return () => { mounted = false; clearInterval(timer); };
   }, [period]);
+
+  useEffect(() => {
+    if (!selectedSensor || !dashboard?.sensors?.length) return;
+    const refreshed = dashboard.sensors.find((sensor) => sensor.dev_eui === selectedSensor.dev_eui || sensor.sensor_id === selectedSensor.sensor_id);
+    if (refreshed && refreshed !== selectedSensor) setSelectedSensor(refreshed);
+  }, [dashboard, selectedSensor]);
 
   const activeDashboard = dashboard || emptyDashboard();
 
@@ -951,11 +981,11 @@ function App() {
       <aside className="hidden lg:flex h-screen w-[220px] shrink-0 flex-col gap-4 px-4 py-4 border-r border-sidebar-border bg-sidebar/60 backdrop-blur-xl overflow-hidden">
         <div className="px-2"><div className="text-2xl font-black tracking-tight">FLEURY</div><div className="text-[9px] tracking-[0.25em] text-muted-foreground mt-0.5">MEDICINA E SAÚDE</div></div>
         <nav className="flex flex-col gap-0.5"><SidebarItem icon={LayoutDashboard} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} /><SidebarItem icon={Box} label="Planta Operacional" active={view === "plant"} onClick={() => setView("plant")} /><SidebarItem icon={Radio} label="Sensores" active={view === "sensors"} onClick={() => setView("sensors")} /><SidebarItem icon={History} label="Histórico" active={view === "history"} onClick={() => setView("history")} /><SidebarItem icon={Bell} label="Alarmes" active={view === "alarms"} onClick={() => setView("alarms")} /><SidebarItem icon={Brain} label="Insights" active={view === "insights"} onClick={() => setView("insights")} /><SidebarItem icon={FileText} label="Relatórios" active={view === "reports"} onClick={() => setView("reports")} /><SidebarItem icon={Wifi} label="Saúde da Rede" active={view === "network"} onClick={() => setView("network")} /><SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} /></nav>
-        <div className="mt-auto flex flex-col gap-3"><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div><div className="text-[11px] text-success mt-1">{activeDashboard.expectedSensors} previstos</div></div><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div><div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div></div>
+        <div className="mt-auto flex flex-col gap-3"><div className="glass rounded-2xl p-3.5"><img src={ccnLogo} alt="CCN Automação" className="w-28 max-w-full mb-3 opacity-95" /><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div></div><div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div><div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div></div>
       </aside>
       <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
-        {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">Integração n8n: {apiState.error}</div>}
-        {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} />}
+        {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{apiState.error}</div>}
+        {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} settings={settings} />}
         {view === "plant" && <PlantView period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={activeDashboard} history={history} setSelectedSensor={setSelectedSensor} />}
         {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} history={history} />}
         {view === "history" && <HistoryView period={period} setPeriod={setPeriod} history={history} />}
@@ -1011,13 +1041,18 @@ function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number;
   const isAlert = !!sensor.alarm_type;
   const statusTone = isAlert ? "text-warning" : "text-success";
   const statusLabel = isAlert ? "Atenção" : "Online";
+  const em300 = isEm300Sensor(sensor);
+  const imageSrc = sensorDisplayImage(sensor);
+  const metricColumns = em300 ? "grid-cols-3" : "grid-cols-4";
+  const trendColumns = em300 ? "grid-cols-2" : "grid-cols-3";
+
   return (
     <article className="sensor-card group relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-slate-800/55 to-slate-950/55 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,.05),0_16px_40px_-28px_rgba(0,0,0,.9)] transition-all duration-300 hover:-translate-y-0.5 hover:border-cyan-400/35 hover:shadow-[0_0_34px_-20px_rgba(56,189,248,.9)]">
       <div className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-[radial-gradient(circle_at_50%_0%,rgba(56,189,248,.14),transparent_45%)]" />
       <div className="relative flex items-start gap-2.5">
         <div className={`h-7 w-7 rounded-lg grid place-items-center text-xs font-bold shrink-0 border ${isAlert ? "bg-warning/15 border-warning/25 text-warning" : "bg-success/15 border-success/25 text-success"}`}>{String(index + 1).padStart(2, "0")}</div>
-        <div className="relative h-12 w-16 shrink-0 grid place-items-center overflow-visible -mt-1">
-          <img src={sensorAm103} alt="Sensor Milesight AM103" className="h-12 w-16 object-contain drop-shadow-[0_12px_18px_rgba(0,0,0,.62)] transition-transform duration-300 group-hover:scale-105" />
+        <div className="relative h-14 w-20 shrink-0 grid place-items-center overflow-visible -mt-1">
+          <img src={imageSrc} alt={em300 ? "Sensor Milesight EM300-TH" : "Sensor Milesight AM103L"} className="max-h-14 max-w-20 object-contain drop-shadow-[0_12px_18px_rgba(0,0,0,.62)] transition-transform duration-300 group-hover:scale-105" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
@@ -1028,10 +1063,10 @@ function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number;
         </div>
       </div>
 
-      <div className="relative mt-2.5 grid grid-cols-4 gap-2 text-center">
+      <div className={`relative mt-2.5 grid ${metricColumns} gap-2 text-center`}>
         <MetricBlock icon={Thermometer} label="Temp." value={formatDecimal(sensor.temperature)} unit="°C" color="#fb923c" />
         <MetricBlock icon={Droplets} label="Umid." value={formatDecimal(sensor.humidity)} unit="%" color="#38bdf8" />
-        <MetricBlock icon={Cloud} label="CO₂" value={formatInt(sensor.co2)} unit="ppm" color="#9db7d7" />
+        {!em300 && <MetricBlock icon={Cloud} label="CO₂" value={formatInt(sensor.co2)} unit="ppm" color="#9db7d7" />}
         <MetricBlock icon={BatteryMedium} label="Bat." value={formatInt(sensor.battery)} unit="%" color="#22c55e" />
       </div>
 
@@ -1039,13 +1074,13 @@ function SensorCard({ sensor, index, history }: { sensor: Sensor; index: number;
         <div className="flex items-center justify-between text-[11px] mb-1.5">
           <span className="text-warning font-medium">Temp.</span>
           <span className="text-info font-medium">Umid.</span>
-          <span className="text-success font-medium">CO₂</span>
+          {!em300 && <span className="text-success font-medium">CO₂</span>}
           <span className="text-muted-foreground">24h</span>
         </div>
-        <div className="grid grid-cols-3 gap-2 h-7">
+        <div className={`grid ${trendColumns} gap-2 h-7`}>
           <Sparkline data={buildSensorTrendFromHistory(history, sensor, "temperature", 0.35, index + 1)} color="#f59e0b" label="Temperatura" unit="°C" />
           <Sparkline data={buildSensorTrendFromHistory(history, sensor, "humidity", 0.8, index + 3)} color="#38bdf8" label="Umidade" unit="%" />
-          <Sparkline data={buildSensorTrendFromHistory(history, sensor, "co2", 18, index + 6)} color="#22c55e" label="CO₂" unit="ppm" />
+          {!em300 && <Sparkline data={buildSensorTrendFromHistory(history, sensor, "co2", 18, index + 6)} color="#22c55e" label="CO₂" unit="ppm" />}
         </div>
       </div>
     </article>
@@ -1078,7 +1113,7 @@ function SensorsView({ sensors, history }: { sensors: Sensor[]; history: History
       <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground pb-1">
         <span>Cards calculados com as leituras do dia</span>
         <Activity className="h-3.5 w-3.5" />
-        <span>Mini gráficos vindos dos registros das últimas 24h no PostgreSQL</span>
+        <span>Mini gráficos com registros das últimas 24h</span>
       </div>
     </>
   );
@@ -1086,7 +1121,7 @@ function SensorsView({ sensors, history }: { sensors: Sensor[]; history: History
 
 function HistoryView({ period, setPeriod, history }: { period: Period; setPeriod: (p: Period) => void; history: HistoryPayload | null }) {
   const series = buildChartSeries(history, period);
-  return <><PageHeader title="Histórico" description="Séries temporais vindas do PostgreSQL por período, sensor e grandeza."><PeriodSelect value={period} onChange={setPeriod} /></PageHeader><section className="grid grid-cols-1 md:grid-cols-3 gap-4"><ChartCard title="Temperatura" type="temp" data={series} /><ChartCard title="Umidade" type="humidity" data={series} /><ChartCard title="CO₂" type="co2" data={series} /></section><div className="glass-strong rounded-2xl p-4"><div className="text-sm font-medium mb-3">Amostras recentes</div><div className="grid grid-cols-1 md:grid-cols-4 gap-3">{series.slice(-8).map((p) => <div key={p.t} className="p-3 rounded-xl bg-white/[0.03] border border-white/5"><div className="text-xs text-muted-foreground">{p.t}</div><div className="text-xl font-semibold">{formatDecimal(p.temp)} °C</div><div className="text-xs text-muted-foreground">{formatDecimal(p.h,0)}% • {formatInt(p.c)} ppm</div></div>)}</div></div></>;
+  return <><PageHeader title="Histórico" description="Séries temporais por período, sensor e grandeza."><PeriodSelect value={period} onChange={setPeriod} /></PageHeader><section className="grid grid-cols-1 md:grid-cols-3 gap-4"><ChartCard title="Temperatura" type="temp" data={series} /><ChartCard title="Umidade" type="humidity" data={series} /><ChartCard title="CO₂" type="co2" data={series} /></section><div className="glass-strong rounded-2xl p-4"><div className="text-sm font-medium mb-3">Amostras recentes</div><div className="grid grid-cols-1 md:grid-cols-4 gap-3">{series.slice(-8).map((p) => <div key={p.t} className="p-3 rounded-xl bg-white/[0.03] border border-white/5"><div className="text-xs text-muted-foreground">{p.t}</div><div className="text-xl font-semibold">{formatDecimal(p.temp)} °C</div><div className="text-xs text-muted-foreground">{formatDecimal(p.h,0)}% • {formatInt(p.c)} ppm</div></div>)}</div></div></>;
 }
 
 function AlarmsView({ alarms, sensors, settings }: { alarms: any[]; sensors: Sensor[]; settings: AlarmSettings }) {
@@ -1097,7 +1132,7 @@ function AlarmsView({ alarms, sensors, settings }: { alarms: any[]; sensors: Sen
 function InsightsView({ dashboard }: { dashboard: DashboardPayload; history: HistoryPayload | null }) {
   const hottest = [...dashboard.sensors].sort((a,b)=>(b.temperature||0)-(a.temperature||0))[0];
   const coldest = [...dashboard.sensors].sort((a,b)=>(a.temperature||99)-(b.temperature||99))[0];
-  return <><PageHeader title="Insights" description="Análises automáticas para operação, conforto e qualidade ambiental." /><section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"><InsightCard icon={Thermometer} title="Área mais quente" text={`${hottest.area}: ${formatDecimal(hottest.temperature)} °C.`} /><InsightCard icon={Wind} title="Área mais fria" text={`${coldest.area}: ${formatDecimal(coldest.temperature)} °C.`} /><InsightCard icon={Cloud} title="CO₂ médio" text={`${formatInt(dashboard.kpis.co2Avg)} ppm no período selecionado.`} /><InsightCard icon={Droplets} title="Umidade média" text={`${formatDecimal(dashboard.kpis.humidityAvg, 0)}% entre os sensores online.`} /><InsightCard icon={BarChart3} title="Conforto" text={`${dashboard.kpis.activeAlarms} sensores fora da faixa térmica.`} /><InsightCard icon={Database} title="Base histórica" text="Relatórios e heatmap semana/mês usam PostgreSQL." /></section></>;
+  return <><PageHeader title="Insights" description="Análises automáticas para operação, conforto e qualidade ambiental." /><section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"><InsightCard icon={Thermometer} title="Área mais quente" text={`${hottest.area}: ${formatDecimal(hottest.temperature)} °C.`} /><InsightCard icon={Wind} title="Área mais fria" text={`${coldest.area}: ${formatDecimal(coldest.temperature)} °C.`} /><InsightCard icon={Cloud} title="CO₂ médio" text={`${formatInt(dashboard.kpis.co2Avg)} ppm no período selecionado.`} /><InsightCard icon={Droplets} title="Umidade média" text={`${formatDecimal(dashboard.kpis.humidityAvg, 0)}% entre os sensores online.`} /><InsightCard icon={BarChart3} title="Conforto" text={`${dashboard.kpis.activeAlarms} sensores fora da faixa térmica.`} /><InsightCard icon={Database} title="Base histórica" text="Relatórios e mapa térmico usam a base histórica." /></section></>;
 }
 
 function ReportsView() {
@@ -1111,7 +1146,7 @@ function NetworkView({ sensors }: { sensors: Sensor[] }) {
   const avgRssi = rssiValues.length ? rssiValues.reduce((a,s)=>a+s,0)/rssiValues.length : null;
   const avgSnr = snrValues.length ? snrValues.reduce((a,s)=>a+s,0)/snrValues.length : null;
   const avgBattery = batteryValues.length ? batteryValues.reduce((a,s)=>a+s,0)/batteryValues.length : null;
-  return <><PageHeader title="Saúde da Rede" description="Monitoramento LoRaWAN do UG56, qualidade de sinal e comunicação dos sensores Milesight." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Server} label="Gateway" value="UG56-915M" /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(avgBattery)}%`} /></section><SensorsView sensors={sensors} history={null} /></>;
+  return <><PageHeader title="Saúde da Rede" description="Monitoramento da qualidade de sinal e comunicação dos sensores ambientais." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Radio} label="Sensores online" value={sensors.filter((s)=>!!s.timestamp).length} /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(avgBattery)}%`} /></section><SensorsView sensors={sensors} history={null} /></>;
 }
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void }) {
@@ -1121,7 +1156,7 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
   useEffect(() => {
     fetchJSON<any>(`${N8N_BASE}/fleury-settings`)
       .then((payload) => setSettings(normalizeSettings(payload)))
-      .catch(() => setStatus("Não foi possível carregar os limites atuais do n8n."));
+      .catch(() => setStatus("Não foi possível carregar os limites atuais."));
   }, []);
 
   const update = (key: keyof typeof settings, value: string) => {
@@ -1140,9 +1175,9 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
       const savedSettings = payload ? normalizeSettings(payload) : settings;
       onSettingsSaved(savedSettings);
       setSettings(savedSettings);
-      setStatus("Limites enviados ao n8n e salvos no PostgreSQL/Redis.");
+      setStatus("Limites ambientais salvos com sucesso.");
     } catch {
-      setStatus("Não foi possível salvar agora. Verifique o workflow fleury-settings no n8n.");
+      setStatus("Não foi possível salvar agora. Tente novamente em instantes.");
     }
   };
 
@@ -1156,7 +1191,7 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
     </label>
   );
 
-  return <><PageHeader title="Configurações" description="Limites de alarmes enviados ao n8n e associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Limites ambientais</div><div className="grid grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ baixo" k="co2_low" unit="ppm" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Integrações</div><div className="space-y-3 text-sm text-muted-foreground"><div>Gateway: <span className="text-foreground">UG56-915M</span></div><div>Endpoint gateway: <span className="text-foreground">/webhook/fleury-milesight-test</span></div><div>Base frontend: <span className="text-foreground">https://fleury-bh-n8n.gpfgqx.easypanel.host</span></div><div>Sensores: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Persistência PostgreSQL: <span className="text-foreground">a cada 10 minutos</span></div><div>Total previsto: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
+  return <><PageHeader title="Configurações" description="Limites de alarmes associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Limites ambientais</div><div className="grid grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ baixo" k="co2_low" unit="ppm" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
 }
 
 function MiniStat({ icon: Icon, label, value }: { icon: any; label: string; value: any }) { return <div className="glass-strong rounded-2xl p-3"><Icon className="h-4 w-4 text-info mb-2" /><div className="text-[11px] text-muted-foreground">{label}</div><div className="text-xl 2xl:text-2xl font-semibold mt-0.5">{value}</div></div>; }
