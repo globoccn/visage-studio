@@ -44,7 +44,7 @@ import {
   Tooltip,
   CartesianGrid,
 } from "recharts";
-import floorPlan from "@/assets/floor-plan-heatmap.jpg";
+import floorPlan from "@/assets/floor-plan-fleury-top.png";
 import ccnLogo from "@/assets/ccn-logo-branco.png";
 import sensorEm300Image from "@/assets/em300-th.webp";
 import sensorAm103Image from "@/assets/amc103l.webp";
@@ -217,6 +217,28 @@ const sensorRegistry: Sensor[] = [
   { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Apoio", floor: "Térreo", x: 86, y: 28, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
 
+const sensorMapPositions: Record<string, { x: number; y: number }> = {
+  "EM300-01": { x: 18, y: 70 },
+  "EM300-02": { x: 33, y: 56 },
+  "EM300-03": { x: 45, y: 55 },
+  "EM300-04": { x: 58, y: 57 },
+  "EM300-05": { x: 74, y: 66 },
+  "EM300-06": { x: 50, y: 42 },
+  "AM103L-07": { x: 23, y: 31 },
+  "AM103L-08": { x: 38, y: 35 },
+  "AM103L-09": { x: 54, y: 35 },
+  "AM103L-10": { x: 68, y: 35 },
+  "AM103L-11": { x: 13, y: 47 },
+  "AM103L-12": { x: 27, y: 47 },
+  "AM103L-13": { x: 42, y: 47 },
+  "AM103L-14": { x: 62, y: 45 },
+  "AM103L-15": { x: 82, y: 39 },
+};
+
+function mapPosition(sensor: Sensor) {
+  return sensorMapPositions[sensor.sensor_id] || { x: sensor.x ?? 50, y: sensor.y ?? 50 };
+}
+
 function isEm300Sensor(sensor: Sensor | null | undefined) {
   const id = `${sensor?.model || ""} ${sensor?.sensor_id || ""} ${sensor?.sensor_name || ""}`.toUpperCase();
   return id.includes("EM300");
@@ -313,14 +335,13 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
     .filter((item): item is { sensor: Sensor; value: number } => typeof item.value === "number");
 
   if (!withValues.length) {
-    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.25), transparent 36%)";
+    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.22), transparent 42%)";
   }
 
   return withValues
     .map(({ sensor, value }) => {
-      const x = sensor.x ?? 50;
-      const y = sensor.y ?? 50;
-      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.72)} 0%, ${heatColor(layer, value, 0.40)} 9%, transparent 23%)`;
+      const { x, y } = mapPosition(sensor);
+      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.78)} 0%, ${heatColor(layer, value, 0.50)} 8%, ${heatColor(layer, value, 0.24)} 16%, transparent 30%)`;
     })
     .join(",");
 }
@@ -826,19 +847,33 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   const activeSensors = sensors.length ? sensors : sensorRegistry;
   const heatBackground = heatmapBackground(activeSensors, layer);
+  const heatmapMask = {
+    WebkitMaskImage: `url(${floorPlan})`,
+    maskImage: `url(${floorPlan})`,
+    WebkitMaskSize: "100% 100%",
+    maskSize: "100% 100%",
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+  } as any;
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
-      <div className="absolute right-4 top-3 z-10 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
-      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[#061126] h-full min-h-0">
-        <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-cover object-center" width={1600} height={960} />
-        <div className="absolute inset-0 mix-blend-screen opacity-65 transition-opacity duration-700" style={{ background: heatBackground }} />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(15,23,42,.08),transparent_62%)]" />
+      <div className="absolute right-4 top-3 z-20 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
+      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.12),transparent_48%),#050b18] h-full min-h-0 grid place-items-center">
+        <div className="floorplan-stage relative h-[96%] max-h-full aspect-[1323/1104] rounded-xl overflow-hidden drop-shadow-[0_28px_70px_rgba(0,0,0,.62)]">
+          <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
+          <div className="absolute inset-0 transition-opacity duration-700 mix-blend-multiply opacity-80" style={{ ...heatmapMask, background: heatBackground, filter: "blur(10px) saturate(1.28)" }} />
+          <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-55" style={{ ...heatmapMask, background: heatBackground, filter: "blur(18px) saturate(1.45)" }} />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,.18),transparent_18%,transparent_82%,rgba(2,6,23,.2)),radial-gradient(circle_at_50%_50%,rgba(255,255,255,.04),transparent_58%)]" />
+          {activeSensors.map((s) => {
+            const pos = mapPosition(s);
+            return (
+              <div key={s.dev_eui || s.sensor_id} className="absolute z-10" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
+                <SensorMapBadge sensor={s} layer={layer} onClick={() => onSelectSensor(s)} />
+              </div>
+            );
+          })}
+        </div>
         <LayerSelector layer={layer} onChange={onLayerChange} />
-        {activeSensors.map((s) => (
-          <div key={s.dev_eui || s.sensor_id} className="absolute z-10" style={{ left: `${s.x ?? 50}%`, top: `${s.y ?? 50}%` }}>
-            <SensorMapBadge sensor={s} layer={layer} onClick={() => onSelectSensor(s)} />
-          </div>
-        ))}
       </div>
     </div>
   );
