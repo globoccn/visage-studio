@@ -424,7 +424,7 @@ function heatmapAmbient(sensors: Sensor[], layer: Layer) {
     .filter((value): value is number => typeof value === "number");
   if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.18), transparent 58%)";
   const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.28)} 0%, ${heatColor(layer, avg, 0.14)} 46%, transparent 82%)`;
+  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.34)} 0%, ${heatColor(layer, avg, 0.20)} 48%, transparent 84%)`;
 }
 
 function heatmapBackground(sensors: Sensor[], layer: Layer) {
@@ -439,10 +439,10 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
 
   const spots = withValues.map(({ sensor, value }) => {
     const { x, y } = mapPosition(sensor);
-    const strong = heatColor(layer, value, 0.92);
-    const mid = heatColor(layer, value, 0.56);
-    const soft = heatColor(layer, value, 0.26);
-    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${mid} 15%, ${soft} 34%, transparent 62%)`;
+    const strong = heatColor(layer, value, 1);
+    const mid = heatColor(layer, value, 0.66);
+    const soft = heatColor(layer, value, 0.34);
+    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${mid} 18%, ${soft} 40%, transparent 68%)`;
   });
 
   return [...spots, heatmapAmbient(sensors, layer)].join(",");
@@ -995,10 +995,10 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[78%] max-w-[920px] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
+          <div className="absolute left-1/2 top-1/2 w-[58.5%] max-w-[690px] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
             <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-85" style={{ ...heatmapMask, background: heatBackground, filter: "blur(18px) saturate(2.05) contrast(1.22)" }} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-42" style={{ ...heatmapMask, background: heatBackground, filter: "blur(42px) saturate(1.95)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-95" style={{ ...heatmapMask, background: heatBackground, filter: "blur(22px) saturate(2.35) contrast(1.34)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-50" style={{ ...heatmapMask, background: heatBackground, filter: "blur(48px) saturate(2.15)" }} />
             <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.14]" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
             {visibleSensors.map((s) => {
