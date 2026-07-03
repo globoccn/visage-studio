@@ -425,6 +425,9 @@ function formatTimePt(value: Date | string | null | undefined) {
 async function parseResponseJSON<T>(res: Response, context: string): Promise<T> {
   const text = await res.text();
   if (!text.trim()) {
+    if (context.includes("/fleury-history")) return { ok: true, count: 0, records: [] } as T;
+    if (context.includes("/fleury-dashboard-latest")) return { ok: true, sensors: [], alarms: [], kpis: {}, expectedSensors: sensorRegistry.length, sensorsOnline: 0 } as T;
+    if (context.includes("/fleury-settings")) return { ok: true, settings: DEFAULT_ALARM_SETTINGS } as T;
     throw new Error(`${context}: resposta vazia do n8n`);
   }
   try {
