@@ -302,23 +302,24 @@ function layerRatio(layer: Layer, value: number) {
 }
 
 function heatColor(layer: Layer, value: number, opacity = 0.58) {
-  const ratio = layerRatio(layer, value);
   if (layer === "humidity") {
-    if (ratio < 0.28) return `rgba(249,115,22,${opacity})`;
-    if (ratio < 0.48) return `rgba(250,204,21,${opacity})`;
-    if (ratio < 0.72) return `rgba(34,197,94,${opacity})`;
-    return `rgba(56,189,248,${opacity})`;
+    if (value < 35) return `rgba(249,115,22,${opacity})`;
+    if (value < 40) return `rgba(250,204,21,${opacity})`;
+    if (value <= 60) return `rgba(34,211,238,${opacity})`;
+    if (value <= 65) return `rgba(34,197,94,${opacity})`;
+    return `rgba(37,99,235,${opacity})`;
   }
   if (layer === "co2") {
-    if (ratio < 0.25) return `rgba(34,197,94,${opacity})`;
-    if (ratio < 0.55) return `rgba(250,204,21,${opacity})`;
-    if (ratio < 0.75) return `rgba(249,115,22,${opacity})`;
+    if (value < 600) return `rgba(34,197,94,${opacity})`;
+    if (value < 900) return `rgba(132,204,22,${opacity})`;
+    if (value < 1000) return `rgba(250,204,21,${opacity})`;
+    if (value < 1200) return `rgba(249,115,22,${opacity})`;
     return `rgba(239,68,68,${opacity})`;
   }
-  if (ratio < 0.22) return `rgba(37,99,235,${opacity})`;
-  if (ratio < 0.42) return `rgba(6,182,212,${opacity})`;
-  if (ratio < 0.62) return `rgba(34,197,94,${opacity})`;
-  if (ratio < 0.80) return `rgba(250,204,21,${opacity})`;
+  if (value < 20.5) return `rgba(37,99,235,${opacity})`;
+  if (value < 22.0) return `rgba(6,182,212,${opacity})`;
+  if (value < 24.0) return `rgba(34,197,94,${opacity})`;
+  if (value < 25.0) return `rgba(250,204,21,${opacity})`;
   return `rgba(239,68,68,${opacity})`;
 }
 
@@ -341,7 +342,7 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
   return withValues
     .map(({ sensor, value }) => {
       const { x, y } = mapPosition(sensor);
-      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.78)} 0%, ${heatColor(layer, value, 0.50)} 8%, ${heatColor(layer, value, 0.24)} 16%, transparent 30%)`;
+      return `radial-gradient(circle at ${x}% ${y}%, ${heatColor(layer, value, 0.72)} 0%, ${heatColor(layer, value, 0.44)} 7%, ${heatColor(layer, value, 0.20)} 15%, transparent 27%)`;
     })
     .join(",");
 }
@@ -785,14 +786,21 @@ function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Lay
   const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
   const secondary = layer === "temperature" ? sensor.humidity : layer === "humidity" ? sensor.temperature : sensor.humidity;
   const tone = disabledLayer || mainValue === null ? "neutral" : toneForSensor(sensor, layer);
-  const shortId = sensor.sensor_id.replace("AM103L-", "AM103L-").replace("EM300-", "EM300-");
+  const shortId = sensor.sensor_id.replace("AM103L-", "A").replace("EM300-", "E");
 
   return (
-    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-left">
-      <div className={`min-w-[58px] rounded-lg bg-gradient-to-b ${pinTone[tone]} border border-white/35 px-2 py-1 text-white shadow-lg transition-transform group-hover:scale-105 group-hover:z-20`}>
-        <div className="text-[10px] font-bold leading-tight text-center drop-shadow-sm">{shortId}</div>
-        <div className="text-[12px] font-semibold leading-tight text-center tabular-nums">{mainValue === null ? "--" : layerValueText(sensor, layer)}</div>
-        {typeof secondary === "number" && <div className="text-[10px] leading-tight text-center text-white/90 tabular-nums">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</div>}
+    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-left outline-none">
+      <div className="relative grid place-items-center">
+        <span className={`absolute h-8 w-8 rounded-full bg-gradient-to-br ${pinTone[tone]} opacity-35 blur-md transition-opacity group-hover:opacity-70`} />
+        <span className={`relative h-5 w-5 rounded-full bg-gradient-to-br ${pinTone[tone]} border border-white/70 shadow-lg transition-transform group-hover:scale-125`} />
+        <span className="absolute left-1/2 top-7 -translate-x-1/2 rounded-full border border-white/20 bg-slate-950/80 px-1.5 py-0.5 text-[9px] font-bold text-white/90 shadow-lg backdrop-blur-sm">
+          {shortId}
+        </span>
+        <span className="pointer-events-none absolute left-1/2 top-10 z-30 hidden min-w-[118px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/92 px-3 py-2 text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
+          <span className="block font-semibold">{sensor.sensor_name}</span>
+          <span className="mt-1 block text-cyan-200">{disabledLayer ? "CO₂ não disponível" : layerValueText(sensor, layer)}</span>
+          {typeof secondary === "number" && <span className="block text-slate-300">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</span>}
+        </span>
       </div>
     </button>
   );
@@ -857,21 +865,24 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
   } as any;
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
-      <div className="absolute right-4 top-3 z-20 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
-      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.12),transparent_48%),#050b18] h-full min-h-0 grid place-items-center">
-        <div className="floorplan-stage relative h-[96%] max-h-full aspect-[1323/1104] rounded-xl overflow-hidden drop-shadow-[0_28px_70px_rgba(0,0,0,.62)]">
-          <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
-          <div className="absolute inset-0 transition-opacity duration-700 mix-blend-multiply opacity-80" style={{ ...heatmapMask, background: heatBackground, filter: "blur(10px) saturate(1.28)" }} />
-          <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-55" style={{ ...heatmapMask, background: heatBackground, filter: "blur(18px) saturate(1.45)" }} />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,.18),transparent_18%,transparent_82%,rgba(2,6,23,.2)),radial-gradient(circle_at_50%_50%,rgba(255,255,255,.04),transparent_58%)]" />
-          {activeSensors.map((s) => {
-            const pos = mapPosition(s);
-            return (
-              <div key={s.dev_eui || s.sensor_id} className="absolute z-10" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
-                <SensorMapBadge sensor={s} layer={layer} onClick={() => onSelectSensor(s)} />
-              </div>
-            );
-          })}
+      <div className="absolute right-4 top-3 z-30 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
+      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
+        <div className="floorplan-stage absolute inset-0 overflow-hidden">
+          <div className="absolute left-1/2 top-1/2 h-[98%] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 scale-[1.28] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
+            <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-multiply opacity-70" style={{ ...heatmapMask, background: heatBackground, filter: "blur(8px) saturate(1.35)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-45" style={{ ...heatmapMask, background: heatBackground, filter: "blur(20px) saturate(1.55)" }} />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.03),transparent_55%)]" />
+            {activeSensors.map((s) => {
+              const pos = mapPosition(s);
+              return (
+                <div key={s.dev_eui || s.sensor_id} className="absolute z-20" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
+                  <SensorMapBadge sensor={s} layer={layer} onClick={() => onSelectSensor(s)} />
+                </div>
+              );
+            })}
+          </div>
         </div>
         <LayerSelector layer={layer} onChange={onLayerChange} />
       </div>
