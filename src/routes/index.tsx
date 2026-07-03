@@ -404,17 +404,26 @@ function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
   ];
 }
 
+function normalizedHeatOpacity(layer: Layer, value: number, opacity: number) {
+  // O amarelo tem luminância naturalmente maior. Reduzimos só essa faixa
+  // para que a potência visual fique equivalente a azul, verde e vermelho.
+  const isYellowTemperature = layer === "temperature" && value >= 24.1 && value < 25;
+  const isYellowCo2 = layer === "co2" && value >= 900 && value <= 1000;
+  return (isYellowTemperature || isYellowCo2) ? opacity * 0.8 : opacity;
+}
+
 function heatColor(layer: Layer, value: number, opacity = 0.58) {
   const stops = colorStopsForLayer(layer);
-  if (value <= stops[0].at) return mixHex(stops[0].color, stops[0].color, 0, opacity);
+  const visualOpacity = normalizedHeatOpacity(layer, value, opacity);
+  if (value <= stops[0].at) return mixHex(stops[0].color, stops[0].color, 0, visualOpacity);
   for (let i = 1; i < stops.length; i++) {
     const prev = stops[i - 1];
     const next = stops[i];
     if (value <= next.at) {
-      return mixHex(prev.color, next.color, (value - prev.at) / (next.at - prev.at), opacity);
+      return mixHex(prev.color, next.color, (value - prev.at) / (next.at - prev.at), visualOpacity);
     }
   }
-  return mixHex(stops[stops.length - 1].color, stops[stops.length - 1].color, 0, opacity);
+  return mixHex(stops[stops.length - 1].color, stops[stops.length - 1].color, 0, visualOpacity);
 }
 
 function heatmapAmbient(sensors: Sensor[], layer: Layer) {
@@ -442,7 +451,7 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
     const strong = heatColor(layer, value, 1);
     const mid = heatColor(layer, value, 0.66);
     const soft = heatColor(layer, value, 0.34);
-    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${mid} 18%, ${soft} 40%, transparent 68%)`;
+    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${strong} 8%, ${mid} 22%, ${soft} 38%, transparent 62%)`;
   });
 
   return [...spots, heatmapAmbient(sensors, layer)].join(",");
@@ -995,11 +1004,11 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[68%] max-w-[980px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
+          <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1536} height={1024} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-95" style={{ ...heatmapMask, background: heatBackground, filter: "blur(22px) saturate(2.35) contrast(1.34)" }} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-50" style={{ ...heatmapMask, background: heatBackground, filter: "blur(48px) saturate(2.15)" }} />
+              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-95" style={{ ...heatmapMask, background: heatBackground, filter: "blur(19px) saturate(2.35) contrast(1.34)" }} />
+              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-50" style={{ ...heatmapMask, background: heatBackground, filter: "blur(41px) saturate(2.15)" }} />
               <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.14]" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
             </div>
