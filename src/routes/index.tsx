@@ -218,23 +218,23 @@ const sensorRegistry: Sensor[] = [
 ];
 
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  // Distribuição provisória mais aberta e harmônica sobre a planta horizontal.
-  // Estes pontos devem ser recalibrados quando o cliente definir a posição física real.
-  "EM300-01": { x: 12, y: 69 },
-  "EM300-02": { x: 26, y: 66 },
-  "EM300-03": { x: 40, y: 69 },
-  "EM300-04": { x: 55, y: 66 },
-  "EM300-05": { x: 70, y: 69 },
-  "EM300-06": { x: 86, y: 66 },
-  "AM103L-07": { x: 12, y: 28 },
-  "AM103L-08": { x: 28, y: 24 },
-  "AM103L-09": { x: 44, y: 28 },
-  "AM103L-10": { x: 62, y: 24 },
-  "AM103L-11": { x: 82, y: 28 },
-  "AM103L-12": { x: 18, y: 47 },
-  "AM103L-13": { x: 38, y: 46 },
-  "AM103L-14": { x: 59, y: 48 },
-  "AM103L-15": { x: 78, y: 47 },
+  // Posições provisórias recalibradas para a planta Fleury final, horizontal e sem perspectiva.
+  // Estes pontos devem ser ajustados quando o cliente validar a posição física real dos sensores.
+  "EM300-01": { x: 14, y: 70 },
+  "EM300-02": { x: 32, y: 61 },
+  "EM300-03": { x: 43, y: 62 },
+  "EM300-04": { x: 55, y: 62 },
+  "EM300-05": { x: 64, y: 64 },
+  "EM300-06": { x: 88, y: 61 },
+  "AM103L-07": { x: 12, y: 34 },
+  "AM103L-08": { x: 30, y: 31 },
+  "AM103L-09": { x: 47, y: 34 },
+  "AM103L-10": { x: 66, y: 30 },
+  "AM103L-11": { x: 85, y: 36 },
+  "AM103L-12": { x: 20, y: 51 },
+  "AM103L-13": { x: 38, y: 50 },
+  "AM103L-14": { x: 56, y: 48 },
+  "AM103L-15": { x: 76, y: 48 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -995,15 +995,15 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[55%] max-w-[820px] aspect-[1323/1104] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
-            <div className="absolute inset-0 overflow-hidden rounded-[10px]" style={{ clipPath: "inset(0 0 7.5% 0)" }}>
-              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
+          <div className="absolute left-1/2 top-1/2 w-[68%] max-w-[980px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
+            <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
+              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1536} height={1024} />
               <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-95" style={{ ...heatmapMask, background: heatBackground, filter: "blur(22px) saturate(2.35) contrast(1.34)" }} />
               <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-50" style={{ ...heatmapMask, background: heatBackground, filter: "blur(48px) saturate(2.15)" }} />
               <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.14]" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
             </div>
-            <div className="absolute inset-0 z-20 pointer-events-none" style={{ clipPath: "inset(0 0 7.5% 0)" }}>
+            <div className="absolute inset-0 z-20 pointer-events-none" >
               {visibleSensors.map((s) => {
                 const pos = mapPosition(s);
                 return (
