@@ -405,11 +405,15 @@ function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
 }
 
 function normalizedHeatOpacity(layer: Layer, value: number, opacity: number) {
-  // O amarelo tem luminância naturalmente maior. Reduzimos só essa faixa
-  // para que a potência visual fique equivalente a azul, verde e vermelho.
+  // Normalização visual por cor: amarelo tem muita luminância e tende a "lavar" o mapa.
+  // Ajustamos a opacidade por faixa para que azul, verde, amarelo e vermelho tenham potência parecida.
   const isYellowTemperature = layer === "temperature" && value >= 24.1 && value < 25;
   const isYellowCo2 = layer === "co2" && value >= 900 && value <= 1000;
-  return (isYellowTemperature || isYellowCo2) ? opacity * 0.8 : opacity;
+  const isGreenTemperature = layer === "temperature" && value >= 23 && value <= 24;
+  const isIdealHumidity = layer === "humidity" && value >= 40 && value <= 60;
+  if (isYellowTemperature || isYellowCo2) return opacity * 0.62;
+  if (isGreenTemperature || isIdealHumidity) return opacity * 1.18;
+  return opacity;
 }
 
 function heatColor(layer: Layer, value: number, opacity = 0.58) {
@@ -426,14 +430,64 @@ function heatColor(layer: Layer, value: number, opacity = 0.58) {
   return mixHex(stops[stops.length - 1].color, stops[stops.length - 1].color, 0, visualOpacity);
 }
 
+type HeatmapZone = {
+  id: string;
+  x: number;
+  y: number;
+  rx: number;
+  ry: number;
+  sensors: string[];
+};
+
+const heatmapZones: HeatmapZone[] = [
+  // Zonas visuais provisórias para apresentação comercial.
+  // Depois do comissionamento, basta trocar sensores/posições por área sem alterar o motor do heatmap.
+  { id: "recepcao_oeste", x: 17, y: 61, rx: 26, ry: 36, sensors: ["EM300-01", "AM103L-12"] },
+  { id: "coleta_central", x: 37, y: 58, rx: 30, ry: 34, sensors: ["EM300-02", "EM300-03", "AM103L-13"] },
+  { id: "nucleo_central", x: 55, y: 58, rx: 25, ry: 32, sensors: ["EM300-04", "AM103L-14"] },
+  { id: "apoio_leste", x: 78, y: 58, rx: 31, ry: 34, sensors: ["EM300-05", "EM300-06", "AM103L-15"] },
+  { id: "salas_superiores_oeste", x: 28, y: 33, rx: 30, ry: 28, sensors: ["AM103L-07", "AM103L-08", "AM103L-09"] },
+  { id: "salas_superiores_leste", x: 73, y: 34, rx: 34, ry: 29, sensors: ["AM103L-10", "AM103L-11"] },
+];
+
+function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
+  const ids = new Set(zone.sensors);
+  return sensors
+    .filter((sensor) => ids.has(sensor.sensor_id))
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => valueForLayer(sensor, layer))
+    .filter((value): value is number => typeof value === "number");
+}
+
+function average(values: number[]) {
+  return values.reduce((acc, value) => acc + value, 0) / values.length;
+}
+
+function nearestZoneValue(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
+  const zoneValues = valuesForZone(zone, sensors, layer);
+  if (zoneValues.length) return average(zoneValues);
+
+  // Fallback visual: se uma zona ainda não tiver sensor válido na camada, usa o sensor válido mais próximo.
+  const valid = sensors
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer), pos: mapPosition(sensor) }))
+    .filter((item): item is { sensor: Sensor; value: number; pos: { x: number; y: number } } => typeof item.value === "number");
+
+  if (!valid.length) return null;
+  const nearest = valid
+    .map((item) => ({ ...item, distance: Math.hypot(item.pos.x - zone.x, item.pos.y - zone.y) }))
+    .sort((a, b) => a.distance - b.distance)[0];
+  return nearest?.value ?? null;
+}
+
 function heatmapAmbient(sensors: Sensor[], layer: Layer) {
   const values = sensors
     .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
     .map((sensor) => valueForLayer(sensor, layer))
     .filter((value): value is number => typeof value === "number");
-  if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.18), transparent 58%)";
-  const avg = values.reduce((a, b) => a + b, 0) / values.length;
-  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.34)} 0%, ${heatColor(layer, avg, 0.20)} 48%, transparent 84%)`;
+  if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.14), transparent 62%)";
+  const avg = average(values);
+  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.18)} 0%, ${heatColor(layer, avg, 0.10)} 52%, transparent 86%)`;
 }
 
 function heatmapBackground(sensors: Sensor[], layer: Layer) {
@@ -446,15 +500,28 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
     return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.20), transparent 58%)";
   }
 
-  const spots = withValues.map(({ sensor, value }) => {
+  // V3: heatmap por área. As zonas criam campos amplos e coerentes; os sensores desenham
+  // núcleos locais por cima. Assim um sensor verde mantém influência visual mesmo cercado por amarelos.
+  const zoneGradients = heatmapZones
+    .map((zone) => {
+      const value = nearestZoneValue(zone, sensors, layer);
+      if (value === null) return null;
+      const center = heatColor(layer, value, 0.50);
+      const mid = heatColor(layer, value, 0.30);
+      const edge = heatColor(layer, value, 0.13);
+      return `radial-gradient(ellipse ${zone.rx}% ${zone.ry}% at ${zone.x}% ${zone.y}%, ${center} 0%, ${mid} 34%, ${edge} 62%, transparent 82%)`;
+    })
+    .filter((gradient): gradient is string => Boolean(gradient));
+
+  const localCores = withValues.map(({ sensor, value }) => {
     const { x, y } = mapPosition(sensor);
-    const strong = heatColor(layer, value, 1);
-    const mid = heatColor(layer, value, 0.66);
-    const soft = heatColor(layer, value, 0.34);
-    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${strong} 8%, ${mid} 22%, ${soft} 38%, transparent 62%)`;
+    const core = heatColor(layer, value, 0.92);
+    const halo = heatColor(layer, value, 0.48);
+    const fade = heatColor(layer, value, 0.18);
+    return `radial-gradient(circle at ${x}% ${y}%, ${core} 0%, ${core} 6%, ${halo} 18%, ${fade} 34%, transparent 52%)`;
   });
 
-  return [...spots, heatmapAmbient(sensors, layer)].join(",");
+  return [...localCores, ...zoneGradients, heatmapAmbient(sensors, layer)].join(",");
 }
 
 function layerValueText(sensor: Sensor, layer: Layer) {
