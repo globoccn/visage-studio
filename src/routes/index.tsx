@@ -159,42 +159,42 @@ const layerConfig: Record<Layer, { label: string; unit: string; icon: any; stops
     label: "Temperatura",
     unit: "°C",
     icon: Thermometer,
-    stops: ["#2563eb", "#06b6d4", "#22c55e", "#facc15", "#f97316", "#ef4444"],
+    // Escala aprovada: <21 azul escuro, 21-22,9 azul, 23-24 verde, 24,1-24,9 amarelo, >=25 vermelho.
+    stops: ["#0f172a", "#1d4ed8", "#22c55e", "#facc15", "#ef4444"],
     ticks: [
-      { value: 28, label: "28.0", tone: "Quente" },
-      { value: 26, label: "26.0" },
-      { value: 24, label: "24.0" },
-      { value: 22, label: "22.0" },
-      { value: 20, label: "20.0" },
-      { value: 18, label: "18.0", tone: "Frio" },
+      { value: 25, label: "≥25", tone: "Quente" },
+      { value: 24.1, label: "24,1–24,9" },
+      { value: 23, label: "23–24" },
+      { value: 21, label: "21–22,9" },
+      { value: 20.9, label: "<21", tone: "Frio" },
     ],
   },
   humidity: {
     label: "Umidade",
     unit: "%",
     icon: Droplets,
-    stops: ["#f97316", "#facc15", "#22c55e", "#38bdf8", "#2563eb"],
+    // Seco → ideal → úmido.
+    stops: ["#ef4444", "#f97316", "#22c55e", "#22d3ee", "#2563eb"],
     ticks: [
-      { value: 75, label: "75", tone: "Alta" },
-      { value: 65, label: "65" },
-      { value: 55, label: "55" },
-      { value: 45, label: "45" },
-      { value: 35, label: "35" },
-      { value: 25, label: "25", tone: "Baixa" },
+      { value: 70, label: ">70", tone: "Alta" },
+      { value: 60.1, label: "60,1–70" },
+      { value: 40, label: "40–60" },
+      { value: 30, label: "30–39,9" },
+      { value: 29.9, label: "<30", tone: "Baixa" },
     ],
   },
   co2: {
     label: "CO₂",
     unit: "ppm",
     icon: Cloud,
-    stops: ["#22c55e", "#84cc16", "#facc15", "#f97316", "#ef4444"],
+    // Ar bom → atenção → crítico.
+    stops: ["#22c55e", "#a3e635", "#facc15", "#f97316", "#ef4444"],
     ticks: [
-      { value: 1400, label: "1400", tone: "Ruim" },
-      { value: 1200, label: "1200" },
-      { value: 1000, label: "1000" },
-      { value: 800, label: "800" },
-      { value: 600, label: "600" },
-      { value: 400, label: "400", tone: "Bom" },
+      { value: 1200, label: ">1200", tone: "Crítico" },
+      { value: 1000, label: "1000–1200" },
+      { value: 900, label: "900–1000" },
+      { value: 700, label: "700–900" },
+      { value: 400, label: "400–700", tone: "Bom" },
     ],
   },
 };
@@ -218,23 +218,23 @@ const sensorRegistry: Sensor[] = [
 ];
 
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  // Distribuição provisória mais aberta para a planta Fleury real.
-  // Estes pontos podem ser recalibrados quando o cliente definir a posição física dos sensores.
-  "EM300-01": { x: 16, y: 76 },
-  "EM300-02": { x: 34, y: 72 },
-  "EM300-03": { x: 50, y: 72 },
-  "EM300-04": { x: 67, y: 72 },
-  "EM300-05": { x: 84, y: 74 },
-  "EM300-06": { x: 56, y: 52 },
-  "AM103L-07": { x: 15, y: 18 },
-  "AM103L-08": { x: 34, y: 18 },
-  "AM103L-09": { x: 52, y: 18 },
-  "AM103L-10": { x: 75, y: 18 },
-  "AM103L-11": { x: 16, y: 43 },
-  "AM103L-12": { x: 34, y: 42 },
-  "AM103L-13": { x: 50, y: 43 },
-  "AM103L-14": { x: 67, y: 43 },
-  "AM103L-15": { x: 87, y: 41 },
+  // Distribuição provisória mais aberta e harmônica sobre a planta horizontal.
+  // Estes pontos devem ser recalibrados quando o cliente definir a posição física real.
+  "EM300-01": { x: 12, y: 69 },
+  "EM300-02": { x: 26, y: 66 },
+  "EM300-03": { x: 40, y: 69 },
+  "EM300-04": { x: 55, y: 66 },
+  "EM300-05": { x: 70, y: 69 },
+  "EM300-06": { x: 86, y: 66 },
+  "AM103L-07": { x: 12, y: 28 },
+  "AM103L-08": { x: 28, y: 24 },
+  "AM103L-09": { x: 44, y: 28 },
+  "AM103L-10": { x: 62, y: 24 },
+  "AM103L-11": { x: 82, y: 28 },
+  "AM103L-12": { x: 18, y: 47 },
+  "AM103L-13": { x: 38, y: 46 },
+  "AM103L-14": { x: 59, y: 48 },
+  "AM103L-15": { x: 78, y: 47 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -259,86 +259,172 @@ function valueForLayer(sensor: Sensor, layer: Layer) {
   return typeof value === "number" ? value : null;
 }
 
-function toneForSensor(sensor: Sensor, layer: Layer) {
-  const value = valueForLayer(sensor, layer);
+function toneForValue(layer: Layer, value: number | null) {
   if (value === null) return "neutral";
   if (layer === "temperature") {
-    if (value < 21.5) return "cold";
-    if (value > 25) return "hot";
-    if (value > 24.3) return "warm";
-    return "cool";
+    if (value < 21) return "veryCold";
+    if (value < 23) return "cold";
+    if (value <= 24) return "ideal";
+    if (value < 25) return "warm";
+    return "hot";
   }
   if (layer === "humidity") {
-    if (value < 35) return "hot";
-    if (value > 65) return "cold";
-    if (value >= 40 && value <= 60) return "cool";
-    return "warm";
+    if (value < 30) return "hot";
+    if (value < 40) return "dry";
+    if (value <= 60) return "ideal";
+    if (value <= 70) return "humid";
+    return "cold";
   }
-  if (value < 600) return "cool";
-  if (value < 900) return "warm";
+  if (value <= 700) return "ideal";
+  if (value <= 900) return "fresh";
+  if (value <= 1000) return "warm";
+  if (value <= 1200) return "dry";
   return "hot";
 }
 
-const pinTone: Record<string, string> = {
-  neutral: "from-slate-400 to-slate-600 shadow-[0_0_16px_rgba(148,163,184,0.5)]",
-  cold: "from-sky-400 to-blue-600 shadow-[0_0_18px_rgba(56,189,248,0.7)]",
-  cool: "from-cyan-300 to-teal-500 shadow-[0_0_18px_rgba(45,212,191,0.7)]",
-  warm: "from-yellow-300 to-amber-500 shadow-[0_0_18px_rgba(245,158,11,0.7)]",
-  hot: "from-orange-400 to-red-600 shadow-[0_0_22px_rgba(239,68,68,0.85)]",
+function toneForSensor(sensor: Sensor, layer: Layer) {
+  return toneForValue(layer, valueForLayer(sensor, layer));
+}
+
+const pinTone: Record<string, { ring: string; fill: string; glow: string; text: string }> = {
+  neutral: {
+    ring: "border-slate-300/70",
+    fill: "from-slate-500/95 to-slate-700/95",
+    glow: "rgba(148,163,184,.42)",
+    text: "text-white",
+  },
+  veryCold: {
+    ring: "border-blue-100/90",
+    fill: "from-slate-950 to-blue-900",
+    glow: "rgba(30,64,175,.86)",
+    text: "text-blue-50",
+  },
+  cold: {
+    ring: "border-sky-200/90",
+    fill: "from-sky-400 to-blue-700",
+    glow: "rgba(56,189,248,.72)",
+    text: "text-white",
+  },
+  ideal: {
+    ring: "border-emerald-100/90",
+    fill: "from-emerald-300 to-green-600",
+    glow: "rgba(34,197,94,.72)",
+    text: "text-slate-950",
+  },
+  fresh: {
+    ring: "border-lime-100/90",
+    fill: "from-lime-300 to-lime-600",
+    glow: "rgba(163,230,53,.66)",
+    text: "text-slate-950",
+  },
+  warm: {
+    ring: "border-yellow-100/90",
+    fill: "from-yellow-300 to-amber-500",
+    glow: "rgba(250,204,21,.78)",
+    text: "text-slate-950",
+  },
+  dry: {
+    ring: "border-orange-100/90",
+    fill: "from-orange-300 to-orange-600",
+    glow: "rgba(249,115,22,.78)",
+    text: "text-white",
+  },
+  humid: {
+    ring: "border-cyan-100/90",
+    fill: "from-cyan-300 to-sky-600",
+    glow: "rgba(34,211,238,.70)",
+    text: "text-slate-950",
+  },
+  hot: {
+    ring: "border-red-100/90",
+    fill: "from-red-400 to-rose-700",
+    glow: "rgba(239,68,68,.86)",
+    text: "text-white",
+  },
 };
 
-
 const layerRanges: Record<Layer, { min: number; max: number }> = {
-  temperature: { min: 18, max: 28 },
-  humidity: { min: 25, max: 75 },
-  co2: { min: 400, max: 1400 },
+  temperature: { min: 19, max: 26 },
+  humidity: { min: 20, max: 80 },
+  co2: { min: 400, max: 1500 },
 };
 
 function clamp(value: number, min = 0, max = 1) {
   return Math.min(max, Math.max(min, value));
 }
 
-function layerRatio(layer: Layer, value: number) {
-  const range = layerRanges[layer];
-  return clamp((value - range.min) / (range.max - range.min));
+function hexToRgb(hex: string) {
+  const clean = hex.replace("#", "");
+  const bigint = parseInt(clean.length === 3 ? clean.split("").map((c) => c + c).join("") : clean, 16);
+  return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+}
+
+function mixHex(a: string, b: string, t: number, opacity = 1) {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  const k = clamp(t);
+  const r = Math.round(ca.r + (cb.r - ca.r) * k);
+  const g = Math.round(ca.g + (cb.g - ca.g) * k);
+  const bl = Math.round(ca.b + (cb.b - ca.b) * k);
+  return `rgba(${r},${g},${bl},${opacity})`;
+}
+
+function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
+  if (layer === "temperature") {
+    return [
+      { at: 20.9, color: "#0f172a" },
+      { at: 21, color: "#1d4ed8" },
+      { at: 22.9, color: "#2563eb" },
+      { at: 23, color: "#22c55e" },
+      { at: 24, color: "#16a34a" },
+      { at: 24.1, color: "#facc15" },
+      { at: 24.9, color: "#f59e0b" },
+      { at: 25, color: "#ef4444" },
+      { at: 26, color: "#b91c1c" },
+    ];
+  }
+  if (layer === "humidity") {
+    return [
+      { at: 20, color: "#b91c1c" },
+      { at: 30, color: "#ef4444" },
+      { at: 40, color: "#f97316" },
+      { at: 50, color: "#22c55e" },
+      { at: 60, color: "#16a34a" },
+      { at: 70, color: "#22d3ee" },
+      { at: 80, color: "#2563eb" },
+    ];
+  }
+  return [
+    { at: 400, color: "#22c55e" },
+    { at: 700, color: "#22c55e" },
+    { at: 900, color: "#a3e635" },
+    { at: 1000, color: "#facc15" },
+    { at: 1200, color: "#f97316" },
+    { at: 1500, color: "#ef4444" },
+  ];
 }
 
 function heatColor(layer: Layer, value: number, opacity = 0.58) {
-  if (layer === "humidity") {
-    if (value < 35) return `rgba(249,115,22,${opacity})`;
-    if (value < 40) return `rgba(250,204,21,${opacity})`;
-    if (value <= 60) return `rgba(14,165,233,${opacity})`;
-    if (value <= 65) return `rgba(34,197,94,${opacity})`;
-    return `rgba(37,99,235,${opacity})`;
+  const stops = colorStopsForLayer(layer);
+  if (value <= stops[0].at) return mixHex(stops[0].color, stops[0].color, 0, opacity);
+  for (let i = 1; i < stops.length; i++) {
+    const prev = stops[i - 1];
+    const next = stops[i];
+    if (value <= next.at) {
+      return mixHex(prev.color, next.color, (value - prev.at) / (next.at - prev.at), opacity);
+    }
   }
-  if (layer === "co2") {
-    if (value < 600) return `rgba(34,197,94,${opacity})`;
-    if (value < 900) return `rgba(132,204,22,${opacity})`;
-    if (value < 1000) return `rgba(250,204,21,${opacity})`;
-    if (value < 1200) return `rgba(249,115,22,${opacity})`;
-    return `rgba(239,68,68,${opacity})`;
-  }
-  if (value < 20.5) return `rgba(37,99,235,${opacity})`;
-  if (value < 22.0) return `rgba(6,182,212,${opacity})`;
-  if (value < 23.5) return `rgba(34,197,94,${opacity})`;
-  if (value < 25.0) return `rgba(250,204,21,${opacity})`;
-  return `rgba(239,68,68,${opacity})`;
+  return mixHex(stops[stops.length - 1].color, stops[stops.length - 1].color, 0, opacity);
 }
 
-function heatColorByRatio(layer: Layer, value: number, opacity = 0.6) {
-  const ratio = layerRatio(layer, value);
-  if (ratio < 0.18) return `rgba(37,99,235,${opacity})`;
-  if (ratio < 0.36) return `rgba(14,165,233,${opacity})`;
-  if (ratio < 0.56) return `rgba(34,197,94,${opacity})`;
-  if (ratio < 0.75) return `rgba(250,204,21,${opacity})`;
-  if (ratio < 0.90) return `rgba(249,115,22,${opacity})`;
-  return `rgba(239,68,68,${opacity})`;
-}
-
-function layerValueText(sensor: Sensor, layer: Layer) {
-  const value = valueForLayer(sensor, layer);
-  if (value === null) return "--";
-  return layer === "co2" ? `${formatInt(value)} ppm` : `${formatDecimal(value, 1)} ${layerConfig[layer].unit}`;
+function heatmapAmbient(sensors: Sensor[], layer: Layer) {
+  const values = sensors
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => valueForLayer(sensor, layer))
+    .filter((value): value is number => typeof value === "number");
+  if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.18), transparent 58%)";
+  const avg = values.reduce((a, b) => a + b, 0) / values.length;
+  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.18)} 0%, ${heatColor(layer, avg, 0.08)} 40%, transparent 74%)`;
 }
 
 function heatmapBackground(sensors: Sensor[], layer: Layer) {
@@ -348,25 +434,36 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
     .filter((item): item is { sensor: Sensor; value: number } => typeof item.value === "number");
 
   if (!withValues.length) {
-    return "radial-gradient(circle at 50% 50%, rgba(14,165,233,.26), rgba(34,197,94,.16) 34%, transparent 62%)";
+    return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.20), transparent 58%)";
   }
 
   const spots = withValues.map(({ sensor, value }) => {
     const { x, y } = mapPosition(sensor);
-    const colorStrong = heatColorByRatio(layer, value, 0.86);
-    const colorMid = heatColorByRatio(layer, value, 0.42);
-    const colorSoft = heatColorByRatio(layer, value, 0.16);
-    return `radial-gradient(circle at ${x}% ${y}%, ${colorStrong} 0%, ${colorMid} 8%, ${colorSoft} 19%, transparent 34%)`;
+    const strong = heatColor(layer, value, 0.82);
+    const mid = heatColor(layer, value, 0.40);
+    const soft = heatColor(layer, value, 0.15);
+    return `radial-gradient(ellipse at ${x}% ${y}%, ${strong} 0%, ${mid} 10%, ${soft} 24%, transparent 44%)`;
   });
 
-  // Camada ambiental ampla para evitar o aspecto de "filtro verde uniforme" quando os sensores estão próximos.
-  const ambient = [
-    "radial-gradient(ellipse at 18% 20%, rgba(37,99,235,.32) 0%, rgba(14,165,233,.22) 18%, transparent 44%)",
-    "radial-gradient(ellipse at 48% 44%, rgba(34,197,94,.25) 0%, rgba(132,204,22,.17) 24%, transparent 52%)",
-    "radial-gradient(ellipse at 78% 70%, rgba(250,204,21,.24) 0%, rgba(249,115,22,.17) 22%, transparent 50%)",
-  ];
+  return [...spots, heatmapAmbient(sensors, layer)].join(",");
+}
 
-  return [...spots, ...ambient].join(",");
+function layerValueText(sensor: Sensor, layer: Layer) {
+  const value = valueForLayer(sensor, layer);
+  if (value === null) return "--";
+  return layer === "co2" ? `${formatInt(value)} ppm` : `${formatDecimal(value, 1)} ${layerConfig[layer].unit}`;
+}
+
+function markerValueText(sensor: Sensor, layer: Layer) {
+  const value = valueForLayer(sensor, layer);
+  if (value === null) return "--";
+  if (layer === "co2") return `${formatInt(value)}`;
+  if (layer === "humidity") return `${formatDecimal(value, 0)}%`;
+  return `${formatDecimal(value, 1)}°`;
+}
+
+function markerUnitText(layer: Layer) {
+  return layer === "co2" ? "ppm" : "";
 }
 
 function formatDecimal(value: number | null | undefined, digits = 1) {
@@ -808,22 +905,28 @@ function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Lay
   const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
   const secondary = layer === "temperature" ? sensor.humidity : layer === "humidity" ? sensor.temperature : sensor.humidity;
   const tone = disabledLayer || mainValue === null ? "neutral" : toneForSensor(sensor, layer);
+  const toneStyle = pinTone[tone] || pinTone.neutral;
   const shortId = sensor.sensor_id.replace("AM103L-", "A").replace("EM300-", "E");
 
   return (
-    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-left outline-none">
-      <div className="relative grid place-items-center">
-        <span className={`absolute h-7 w-7 rounded-full bg-gradient-to-br ${pinTone[tone]} opacity-40 blur-md transition-opacity group-hover:opacity-75`} />
-        <span className={`relative h-4 w-4 rounded-full bg-gradient-to-br ${pinTone[tone]} border border-white/70 shadow-lg ring-2 ring-white/10 transition-transform group-hover:scale-125`} />
-        <span className="absolute left-1/2 top-5 -translate-x-1/2 rounded-full border border-white/15 bg-slate-950/78 px-1.5 py-0.5 text-[8px] font-bold text-white/90 shadow-lg backdrop-blur-sm">
-          {shortId}
-        </span>
-        <span className="pointer-events-none absolute left-1/2 top-10 z-30 hidden min-w-[118px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/92 px-3 py-2 text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
-          <span className="block font-semibold">{sensor.sensor_name}</span>
-          <span className="mt-1 block text-cyan-200">{disabledLayer ? "CO₂ não disponível" : layerValueText(sensor, layer)}</span>
-          {typeof secondary === "number" && <span className="block text-slate-300">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</span>}
-        </span>
+    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-center outline-none">
+      <span
+        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl opacity-60 transition-opacity group-hover:opacity-90"
+        style={{ background: toneStyle.glow }}
+      />
+      <div className={`relative min-w-[46px] rounded-2xl border ${toneStyle.ring} bg-gradient-to-br ${toneStyle.fill} px-2.5 py-1.5 shadow-[0_14px_34px_rgba(0,0,0,.38)] ring-1 ring-white/15 transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-105`}>
+        <div className={`leading-none ${toneStyle.text}`}>
+          <div className="text-[12px] font-black tracking-tight tabular-nums">{disabledLayer ? "--" : markerValueText(sensor, layer)}</div>
+          {markerUnitText(layer) && <div className="mt-0.5 text-[7px] font-bold uppercase opacity-80">{markerUnitText(layer)}</div>}
+        </div>
+        <div className="mt-1 border-t border-white/20 pt-0.5 text-[8px] font-black tracking-wide text-white drop-shadow-sm">{shortId}</div>
       </div>
+      <span className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-30 hidden min-w-[154px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/94 px-3 py-2 text-left text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
+        <span className="block font-semibold">{sensor.sensor_name}</span>
+        <span className="mt-1 block text-cyan-200">{disabledLayer ? "CO₂ não disponível" : layerValueText(sensor, layer)}</span>
+        {typeof secondary === "number" && <span className="block text-slate-300">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</span>}
+        <span className="mt-1 block text-[10px] text-slate-400">{sensor.area}</span>
+      </span>
     </button>
   );
 }
@@ -876,6 +979,7 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   const activeSensors = sensors.length ? sensors : sensorRegistry;
+  const visibleSensors = layer === "co2" ? activeSensors.filter((sensor) => !isEm300Sensor(sensor)) : activeSensors;
   const heatBackground = heatmapBackground(activeSensors, layer);
   const heatmapMask = {
     WebkitMaskImage: `url(${floorPlan})`,
@@ -891,13 +995,13 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[96%] max-w-[1120px] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
+          <div className="absolute left-1/2 top-1/2 w-[88%] max-w-[1040px] aspect-[1323/1104] -translate-x-1/2 -translate-y-1/2 origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]">
             <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1323} height={1104} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color opacity-78" style={{ ...heatmapMask, background: heatBackground, filter: "blur(10px) saturate(1.65) contrast(1.08)" }} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-38" style={{ ...heatmapMask, background: heatBackground, filter: "blur(24px) saturate(1.85)" }} />
-            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-24" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.20) 0 1px, transparent 1px 18px)", filter: "blur(.2px)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-70" style={{ ...heatmapMask, background: heatBackground, filter: "blur(14px) saturate(1.75) contrast(1.12)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-30" style={{ ...heatmapMask, background: heatBackground, filter: "blur(34px) saturate(1.65)" }} />
+            <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.18]" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
-            {activeSensors.map((s) => {
+            {visibleSensors.map((s) => {
               const pos = mapPosition(s);
               return (
                 <div key={s.dev_eui || s.sensor_id} className="absolute z-20" style={{ left: `${pos.x}%`, top: `${pos.y}%` }}>
