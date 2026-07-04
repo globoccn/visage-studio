@@ -862,7 +862,7 @@ function normalizeSettings(payload: any): AlarmSettings {
     temperature_high: Number(source.temperature_high ?? DEFAULT_ALARM_SETTINGS.temperature_high),
     humidity_low: Number(source.humidity_low ?? DEFAULT_ALARM_SETTINGS.humidity_low),
     humidity_high: Number(source.humidity_high ?? DEFAULT_ALARM_SETTINGS.humidity_high),
-    co2_low: Number(source.co2_low ?? DEFAULT_ALARM_SETTINGS.co2_low),
+    co2_low: DEFAULT_ALARM_SETTINGS.co2_low,
     co2_high: Number(source.co2_high ?? DEFAULT_ALARM_SETTINGS.co2_high),
   };
 }
@@ -883,7 +883,6 @@ function buildAlarmsFromSensors(sensors: Sensor[], settings: AlarmSettings) {
       if (s.humidity > settings.humidity_high) push("humidity_high", s.humidity, "%", settings.humidity_high);
     }
     if (typeof s.co2 === "number") {
-      if (s.co2 < settings.co2_low) push("co2_low", s.co2, "ppm", settings.co2_low);
       if (s.co2 > settings.co2_high) push("co2_high", s.co2, "ppm", settings.co2_high);
     }
   });
@@ -1097,6 +1096,53 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
   );
 }
 
+function metricDomain(data: { t: string; temp: number | null; h: number | null; c: number | null }[], key: "temp" | "h" | "c") {
+  const values = data.map((row) => row[key]).filter((value): value is number => typeof value === "number");
+  if (!values.length) {
+    if (key === "temp") return [18, 30] as [number, number];
+    if (key === "h") return [0, 100] as [number, number];
+    return [400, 1500] as [number, number];
+  }
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const pad = key === "c" ? 80 : key === "h" ? 6 : 1;
+  const floor = key === "c" ? Math.max(350, Math.floor((min - pad) / 50) * 50) : key === "h" ? Math.max(0, Math.floor(min - pad)) : Math.floor((min - pad) * 10) / 10;
+  const ceil = key === "c" ? Math.min(1800, Math.ceil((max + pad) / 50) * 50) : key === "h" ? Math.min(100, Math.ceil(max + pad)) : Math.ceil((max + pad) * 10) / 10;
+  return floor === ceil ? [floor - pad, ceil + pad] as [number, number] : [floor, ceil] as [number, number];
+}
+
+function SensorTrendCard({ title, dataKey, data, color, unit }: { title: string; dataKey: "temp" | "h" | "c"; data: { t: string; temp: number | null; h: number | null; c: number | null }[]; color: string; unit: string }) {
+  const values = data.map((row) => row[dataKey]).filter((value): value is number => typeof value === "number");
+  const domain = metricDomain(data, dataKey);
+  const latest = values.length ? values[values.length - 1] : null;
+  return (
+    <div className="rounded-xl border border-white/5 bg-white/[0.025] p-2 min-h-0 flex flex-col">
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <div className="text-[10px] text-muted-foreground">{title}</div>
+        <div className="text-[10px] font-semibold tabular-nums" style={{ color }}>{latest === null ? "--" : `${formatDecimal(latest, dataKey === "c" ? 0 : 1)} ${unit}`}</div>
+      </div>
+      <div className="h-[54px] min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 3, right: 4, left: 0, bottom: 0 }}>
+            <XAxis dataKey="t" hide />
+            <YAxis hide domain={domain} />
+            <Tooltip
+              contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }}
+              formatter={(value: any) => [`${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: dataKey === "c" ? 0 : 1 })} ${unit}`, title]}
+              labelFormatter={(value) => String(value)}
+            />
+            <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.8} dot={false} connectNulls isAnimationActive={false} />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+      <div className="flex items-center justify-between text-[9px] text-muted-foreground/80 mt-0.5">
+        <span>{formatDecimal(domain[0], dataKey === "c" ? 0 : 1)}{unit}</span>
+        <span>{formatDecimal(domain[1], dataKey === "c" ? 0 : 1)}{unit}</span>
+      </div>
+    </div>
+  );
+}
+
 function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; history: HistoryPayload | null; period: Period }) {
   const s = sensor || sensorRegistry[5];
   const isAlert = !!s.alarm_type;
@@ -1137,22 +1183,10 @@ function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; hist
       </div>
       <div className="pt-2 mt-1.5 border-t border-white/10 flex-1 min-h-0 flex flex-col">
         <div className="text-[11px] text-muted-foreground mb-1.5">Tendência do período</div>
-        <div className="flex-1 min-h-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={series} margin={{ top: 6, right: 4, left: 0, bottom: 0 }}>
-              <XAxis dataKey="t" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-              <YAxis yAxisId="left" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={["dataMin - 1", "dataMax + 1"]} tickFormatter={(v)=>`${v}°C`} width={30} />
-              {!em300 && <YAxis yAxisId="right" orientation="right" stroke="#64748b" fontSize={9} tickLine={false} axisLine={false} domain={["dataMin - 80", "dataMax + 80"]} tickFormatter={(v)=>`${v} ppm`} width={42} />}
-              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, fontSize: 11 }} formatter={(value: any, name: any) => {
-                const labels: Record<string, string> = { temp: "Temperatura", h: "Umidade", c: "CO₂" };
-                const units: Record<string, string> = { temp: "°C", h: "%", c: "ppm" };
-                return [`${Number(value).toLocaleString("pt-BR", { maximumFractionDigits: name === "c" ? 0 : 1 })} ${units[name] || ""}`, labels[name] || name];
-              }} />
-              <Line yAxisId="left" type="monotone" dataKey="temp" stroke="#ef4444" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
-              <Line yAxisId="left" type="monotone" dataKey="h" stroke="#38bdf8" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />
-              {!em300 && <Line yAxisId="right" type="monotone" dataKey="c" stroke="#22c55e" strokeWidth={1.5} dot={false} connectNulls isAnimationActive={false} />}
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="grid grid-cols-1 gap-1.5 flex-1 min-h-0 overflow-hidden">
+          <SensorTrendCard title="Temperatura" dataKey="temp" data={series} color="#ef4444" unit="°C" />
+          <SensorTrendCard title="Umidade" dataKey="h" data={series} color="#38bdf8" unit="%" />
+          {!em300 && <SensorTrendCard title="CO₂" dataKey="c" data={series} color="#22c55e" unit="ppm" />}
         </div>
       </div>
     </div>
@@ -1172,7 +1206,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
         <KpiCard label="Temp. mín." value={formatDecimal(data.kpis.temperatureMin)} unit="°C" delta="Limite frio 21,5 °C" deltaTone="down" color="#22d3ee" seed={2} />
         <KpiCard label="Temp. máx." value={formatDecimal(data.kpis.temperatureMax)} unit="°C" delta="Limite quente 25,0 °C" deltaTone="warn" color="#f97316" seed={3} />
         <KpiCard label="Umidade média" value={formatDecimal(data.kpis.humidityAvg, 0)} unit="%" delta="Faixa ideal 40% - 60%" deltaTone="up" color="#38bdf8" seed={4} />
-        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta={`Faixa ideal ${formatInt(settings.co2_low)} - ${formatInt(settings.co2_high)} ppm`} deltaTone="up" color="#22c55e" seed={5} />
+        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta={`Faixa ideal 400 - ${formatInt(settings.co2_high)} ppm`} deltaTone="up" color="#22c55e" seed={5} />
         <KpiCard label="Conforto ambiental" value={`${comfort}`} unit="%" delta={`${data.kpis.activeAlarms} alarmes ativos`} color="#ef4444" seed={6} critical={data.kpis.activeAlarms > 0} />
       </section>
       <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 flex-1 min-h-0">
@@ -1264,7 +1298,6 @@ function alarmLabel(type: string) {
     temperature_high: "Temperatura alta",
     humidity_low: "Umidade baixa",
     humidity_high: "Umidade alta",
-    co2_low: "CO₂ baixo",
     co2_high: "CO₂ alto",
   };
   return labels[type] || type || "Alarme";
@@ -1495,20 +1528,232 @@ function SensorsView({ sensors, history }: { sensors: Sensor[]; history: History
   );
 }
 
+function metricAverage(records: HistoryRecord[], field: Layer) {
+  const values = records.map((record) => record[field]).filter((value): value is number => typeof value === "number");
+  return values.length ? values.reduce((acc, value) => acc + value, 0) / values.length : null;
+}
+
+function metricMax(records: HistoryRecord[], field: Layer) {
+  const values = records.map((record) => record[field]).filter((value): value is number => typeof value === "number");
+  return values.length ? Math.max(...values) : null;
+}
+
 function HistoryView({ period, setPeriod, history }: { period: Period; setPeriod: (p: Period) => void; history: HistoryPayload | null }) {
   const series = buildChartSeries(history, period);
-  return <><PageHeader title="Histórico" description="Séries temporais por período, sensor e grandeza."><PeriodSelect value={period} onChange={setPeriod} /></PageHeader><section className="grid grid-cols-1 md:grid-cols-3 gap-4"><ChartCard title="Temperatura" type="temp" data={series} /><ChartCard title="Umidade" type="humidity" data={series} /><ChartCard title="CO₂" type="co2" data={series} /></section><div className="glass-strong rounded-2xl p-4"><div className="text-sm font-medium mb-3">Amostras recentes</div><div className="grid grid-cols-1 md:grid-cols-4 gap-3">{series.slice(-8).map((p) => <div key={p.t} className="p-3 rounded-xl bg-white/[0.03] border border-white/5"><div className="text-xs text-muted-foreground">{p.t}</div><div className="text-xl font-semibold">{formatDecimal(p.temp)} °C</div><div className="text-xs text-muted-foreground">{formatDecimal(p.h,0)}% • {formatInt(p.c)} ppm</div></div>)}</div></div></>;
+  const records = history?.records || [];
+  const latest = [...records].sort((a, b) => new Date(b.reading_time || b.timestamp || 0).getTime() - new Date(a.reading_time || a.timestamp || 0).getTime()).slice(0, 10);
+  const sensorsCount = new Set(records.map((record) => record.sensor_id)).size;
+  const tempAvg = metricAverage(records, "temperature");
+  const humidityAvg = metricAverage(records, "humidity");
+  const co2Max = metricMax(records, "co2");
+
+  return (
+    <>
+      <PageHeader title="Histórico" description="Análise temporal das condições ambientais por período, métrica e sensor.">
+        <PeriodSelect value={period} onChange={setPeriod} />
+      </PageHeader>
+
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <MiniStat icon={Database} label="Amostras" value={records.length} caption={`${periodLabel[period]} selecionado`} />
+        <MiniStat icon={Radio} label="Sensores com dados" value={sensorsCount || "--"} caption="com leitura histórica" tone="success" />
+        <MiniStat icon={Thermometer} label="Temp. média" value={`${formatDecimal(tempAvg)} °C`} caption="média do período" tone="warning" />
+        <MiniStat icon={Cloud} label="CO₂ máximo" value={`${formatInt(co2Max)} ppm`} caption="maior leitura" tone="info" />
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.35fr)_minmax(360px,.65fr)] gap-4">
+        <div className="glass-strong rounded-2xl p-4 min-h-[360px] flex flex-col">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <div className="text-base font-semibold">Tendência consolidada</div>
+              <div className="text-xs text-muted-foreground">Temperatura, umidade e CO₂ com faixas operacionais destacadas.</div>
+            </div>
+            <div className="hidden md:flex items-center gap-3 text-[11px] text-muted-foreground">
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-critical" /> Temp.</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-info" /> Umidade</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-success" /> CO₂</span>
+            </div>
+          </div>
+          <div className="flex-1 min-h-[290px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={series} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid stroke="rgba(148,163,184,.10)" vertical={false} />
+                <XAxis dataKey="t" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                <YAxis yAxisId="temp" stroke="#ef4444" fontSize={10} tickLine={false} axisLine={false} domain={[18, 30]} width={34} tickFormatter={(v)=>`${v}°`} />
+                <YAxis yAxisId="humidity" orientation="right" stroke="#38bdf8" fontSize={10} tickLine={false} axisLine={false} domain={[0, 100]} width={34} tickFormatter={(v)=>`${v}%`} />
+                <YAxis yAxisId="co2" hide domain={[350, 1500]} />
+                <ReferenceArea yAxisId="temp" y1={23} y2={24} fill="#22c55e" fillOpacity={0.08} />
+                <ReferenceArea yAxisId="humidity" y1={40} y2={60} fill="#38bdf8" fillOpacity={0.07} />
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 10, fontSize: 12 }} />
+                <Line yAxisId="temp" type="monotone" dataKey="temp" name="Temperatura" stroke="#ef4444" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="humidity" type="monotone" dataKey="h" name="Umidade" stroke="#38bdf8" strokeWidth={2} dot={false} connectNulls />
+                <Line yAxisId="co2" type="monotone" dataKey="c" name="CO₂" stroke="#22c55e" strokeWidth={2} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          <ChartCard title={`Temperatura (${periodLabel[period]})`} type="temp" data={series} />
+          <ChartCard title={`Umidade Relativa (${periodLabel[period]})`} type="humidity" data={series} />
+          <ChartCard title={`CO₂ (${periodLabel[period]})`} type="co2" data={series} />
+        </div>
+      </section>
+
+      <div className="glass-strong rounded-2xl p-4">
+        <div className="flex items-center justify-between gap-3 mb-3">
+          <div>
+            <div className="text-sm font-semibold">Últimas leituras registradas</div>
+            <div className="text-xs text-muted-foreground">Base histórica usada para gráficos, relatórios e análise por período.</div>
+          </div>
+          <Search className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="overflow-hidden rounded-xl border border-white/5">
+          <div className="grid grid-cols-[1.1fr_1fr_.7fr_.7fr_.7fr_.8fr] bg-white/[0.04] text-[11px] uppercase tracking-wider text-muted-foreground px-3 py-2">
+            <span>Sensor</span><span>Área</span><span>Temp.</span><span>Umid.</span><span>CO₂</span><span>Horário</span>
+          </div>
+          {latest.length ? latest.map((record, index) => (
+            <div key={`${record.sensor_id}-${record.reading_time}-${index}`} className="grid grid-cols-[1.1fr_1fr_.7fr_.7fr_.7fr_.8fr] px-3 py-2 text-xs border-t border-white/5 hover:bg-white/[0.025] transition-colors">
+              <span className="font-medium truncate">{record.sensor_name || record.sensor_id}</span>
+              <span className="text-muted-foreground truncate">{record.area}</span>
+              <span>{formatDecimal(record.temperature)} °C</span>
+              <span>{formatDecimal(record.humidity, 0)}%</span>
+              <span>{isEm300Sensor(record) ? "--" : `${formatInt(record.co2)} ppm`}</span>
+              <span className="text-muted-foreground">{formatTimePt(record.reading_time || record.timestamp)}</span>
+            </div>
+          )) : <div className="px-3 py-8 text-center text-sm text-muted-foreground">Sem amostras históricas para o período selecionado.</div>}
+        </div>
+      </div>
+    </>
+  );
 }
 
 function AlarmsView({ alarms, sensors, settings }: { alarms: any[]; sensors: Sensor[]; settings: AlarmSettings }) {
   const active = alarms.length ? alarms : buildAlarmsFromSensors(sensors, settings);
-  return <><PageHeader title="Alarmes" description="Gestão de desvios conforme limites configurados para temperatura, umidade e CO₂." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={AlertTriangle} label="Ativos" value={active.length} /><MiniStat icon={Thermometer} label="Temp. baixa/alta" value={`${formatDecimal(settings.temperature_low)} / ${formatDecimal(settings.temperature_high)} °C`} /><MiniStat icon={Droplets} label="Umid. baixa/alta" value={`${formatDecimal(settings.humidity_low, 0)} / ${formatDecimal(settings.humidity_high, 0)} %`} /><MiniStat icon={Cloud} label="CO₂ baixo/alto" value={`${formatInt(settings.co2_low)} / ${formatInt(settings.co2_high)} ppm`} /></section><RecentAlerts alarms={active} /></>;
+  const tempAlarms = active.filter((alarm) => String(alarm.type || "").startsWith("temperature"));
+  const humidityAlarms = active.filter((alarm) => String(alarm.type || "").startsWith("humidity"));
+  const co2Alarms = active.filter((alarm) => alarm.type === "co2_high");
+  const ordered = [...active].sort((a, b) => new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime());
+
+  return (
+    <>
+      <PageHeader title="Alarmes" description="Painel operacional de desvios ativos, limites configurados e priorização por métrica." />
+      <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <MiniStat icon={AlertTriangle} label="Alarmes ativos" value={active.length} tone={active.length ? "critical" : "success"} caption={active.length ? "requer atenção" : "operação normal"} />
+        <MiniStat icon={Thermometer} label="Temperatura" value={tempAlarms.length} tone={tempAlarms.length ? "warning" : "success"} caption={`${formatDecimal(settings.temperature_low)}–${formatDecimal(settings.temperature_high)} °C`} />
+        <MiniStat icon={Droplets} label="Umidade" value={humidityAlarms.length} tone={humidityAlarms.length ? "warning" : "success"} caption={`${formatDecimal(settings.humidity_low, 0)}–${formatDecimal(settings.humidity_high, 0)} %`} />
+        <MiniStat icon={Cloud} label="CO₂ alto" value={co2Alarms.length} tone={co2Alarms.length ? "critical" : "success"} caption={`limite ${formatInt(settings.co2_high)} ppm`} />
+      </section>
+
+      <section className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-4">
+        <div className="glass-strong rounded-2xl p-4">
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <div className="text-base font-semibold">Fila operacional</div>
+              <div className="text-xs text-muted-foreground">Alarmes ordenados por atualização mais recente.</div>
+            </div>
+            <div className="glass rounded-xl px-3 py-1.5 text-xs text-muted-foreground">{active.length} ocorrências</div>
+          </div>
+          <div className="space-y-2">
+            {ordered.length ? ordered.map((alarm, index) => (
+              <div key={`${alarm.sensor_id}-${alarm.type}-${index}`} className="grid grid-cols-[auto_1fr_auto] gap-3 items-center rounded-xl border border-white/5 bg-white/[0.03] p-3">
+                <div className={`h-10 w-10 rounded-xl grid place-items-center ${alarm.type === "co2_high" ? "bg-critical/15 text-critical" : "bg-warning/15 text-warning"}`}><AlertTriangle className="h-5 w-5" /></div>
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold truncate">{alarm.sensor_name || alarm.sensor_id}</div>
+                  <div className="text-xs text-muted-foreground truncate">{alarm.area || "Área não informada"} • {alarmLabel(alarm.type)}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-semibold tabular-nums">{formatDecimal(Number(alarm.value), alarm.unit === "ppm" ? 0 : 1)} {alarm.unit || ""}</div>
+                  <div className="text-[11px] text-muted-foreground">limite {formatDecimal(Number(alarm.limit), alarm.unit === "ppm" ? 0 : 1)}</div>
+                </div>
+              </div>
+            )) : <div className="rounded-xl border border-white/5 bg-white/[0.03] p-8 text-center text-sm text-muted-foreground">Nenhum alarme ativo com os limites atuais.</div>}
+          </div>
+        </div>
+
+        <div className="glass-strong rounded-2xl p-4">
+          <div className="text-base font-semibold mb-1">Limites em vigor</div>
+          <div className="text-xs text-muted-foreground mb-4">Configuração usada para classificar os desvios.</div>
+          <div className="space-y-3">
+            <MiniSetting label="Temperatura baixa" value={`${formatDecimal(settings.temperature_low)} °C`} />
+            <MiniSetting label="Temperatura alta" value={`${formatDecimal(settings.temperature_high)} °C`} />
+            <MiniSetting label="Umidade baixa" value={`${formatDecimal(settings.humidity_low, 0)} %`} />
+            <MiniSetting label="Umidade alta" value={`${formatDecimal(settings.humidity_high, 0)} %`} />
+            <MiniSetting label="CO₂ alto" value={`${formatInt(settings.co2_high)} ppm`} />
+          </div>
+        </div>
+      </section>
+    </>
+  );
 }
 
-function InsightsView({ dashboard }: { dashboard: DashboardPayload; history: HistoryPayload | null }) {
-  const hottest = [...dashboard.sensors].sort((a,b)=>(b.temperature||0)-(a.temperature||0))[0];
-  const coldest = [...dashboard.sensors].sort((a,b)=>(a.temperature||99)-(b.temperature||99))[0];
-  return <><PageHeader title="Insights" description="Análises automáticas para operação, conforto e qualidade ambiental." /><section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"><InsightCard icon={Thermometer} title="Área mais quente" text={`${hottest.area}: ${formatDecimal(hottest.temperature)} °C.`} /><InsightCard icon={Wind} title="Área mais fria" text={`${coldest.area}: ${formatDecimal(coldest.temperature)} °C.`} /><InsightCard icon={Cloud} title="CO₂ médio" text={`${formatInt(dashboard.kpis.co2Avg)} ppm no período selecionado.`} /><InsightCard icon={Droplets} title="Umidade média" text={`${formatDecimal(dashboard.kpis.humidityAvg, 0)}% entre os sensores online.`} /><InsightCard icon={BarChart3} title="Conforto" text={`${dashboard.kpis.activeAlarms} sensores fora da faixa térmica.`} /><InsightCard icon={Database} title="Base histórica" text="Relatórios e mapa térmico usam a base histórica." /></section></>;
+function InsightsView({ dashboard, history }: { dashboard: DashboardPayload; history: HistoryPayload | null }) {
+  const sensorsWithTemp = dashboard.sensors.filter((sensor) => typeof sensor.temperature === "number");
+  const hottest = [...sensorsWithTemp].sort((a,b)=>(b.temperature||0)-(a.temperature||0))[0];
+  const coldest = [...sensorsWithTemp].sort((a,b)=>(a.temperature||99)-(b.temperature||99))[0];
+  const avgHumidity = dashboard.kpis.humidityAvg;
+  const avgCo2 = dashboard.kpis.co2Avg;
+  const records = history?.records || [];
+  const samples = records.length;
+  const activeAlarms = dashboard.kpis.activeAlarms;
+
+  const insightCards = [
+    {
+      icon: Thermometer,
+      title: "Maior temperatura",
+      priority: hottest?.temperature && hottest.temperature >= 25 ? "Atenção" : "Informativo",
+      text: hottest ? `${hottest.area} apresenta a maior temperatura atual (${formatDecimal(hottest.temperature)} °C). ${hottest.temperature && hottest.temperature >= 25 ? "Recomenda-se verificar carga térmica e insuflamento local." : "A condição permanece próxima da faixa operacional."}` : "Sem leituras de temperatura disponíveis.",
+      tone: hottest?.temperature && hottest.temperature >= 25 ? "text-warning" : "text-info",
+    },
+    {
+      icon: Droplets,
+      title: "Umidade média",
+      priority: avgHumidity && (avgHumidity < 40 || avgHumidity > 60) ? "Atenção" : "Normal",
+      text: `A umidade média está em ${formatDecimal(avgHumidity, 0)}%. ${avgHumidity && avgHumidity >= 40 && avgHumidity <= 60 ? "A maior parte dos ambientes está dentro da faixa recomendada." : "Há desvio em relação à faixa ideal de 40% a 60%."}`,
+      tone: avgHumidity && (avgHumidity < 40 || avgHumidity > 60) ? "text-warning" : "text-success",
+    },
+    {
+      icon: Cloud,
+      title: "Qualidade do ar",
+      priority: avgCo2 && avgCo2 > 1000 ? "Atenção" : "Normal",
+      text: `CO₂ médio em ${formatInt(avgCo2)} ppm. ${avgCo2 && avgCo2 > 1000 ? "Avaliar renovação de ar nos ambientes com maior concentração." : "Níveis compatíveis com operação normal."}`,
+      tone: avgCo2 && avgCo2 > 1000 ? "text-warning" : "text-success",
+    },
+    {
+      icon: AlertTriangle,
+      title: "Alarmes ativos",
+      priority: activeAlarms ? "Prioritário" : "Normal",
+      text: activeAlarms ? `${activeAlarms} alarme(s) ativo(s) exigem acompanhamento da operação.` : "Nenhum alarme ativo no momento.",
+      tone: activeAlarms ? "text-critical" : "text-success",
+    },
+    {
+      icon: BarChart3,
+      title: "Base histórica",
+      priority: samples ? "Disponível" : "Aguardando dados",
+      text: samples ? `${samples} amostras históricas disponíveis para análises, gráficos e relatórios.` : "A base histórica ainda não possui amostras para o período selecionado.",
+      tone: "text-info",
+    },
+    {
+      icon: ShieldCheck,
+      title: "Recomendação operacional",
+      priority: "Ação sugerida",
+      text: coldest && hottest ? `Priorizar inspeção nas áreas ${hottest.area} e ${coldest.area} para equilibrar conforto térmico.` : "Acompanhar tendência por mais leituras antes de ações corretivas.",
+      tone: "text-info",
+    },
+  ];
+
+  return (
+    <>
+      <PageHeader title="Insights" description="Leituras interpretadas em recomendações objetivas para operação, conforto e qualidade ambiental." />
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <MiniStat icon={Brain} label="Insights gerados" value={insightCards.length} caption="análises automáticas" />
+        <MiniStat icon={AlertTriangle} label="Prioridades" value={activeAlarms} tone={activeAlarms ? "critical" : "success"} caption="baseadas em alarmes" />
+        <MiniStat icon={CalendarDays} label="Amostras analisadas" value={samples} caption="histórico do período" />
+      </section>
+      <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {insightCards.map((item) => <InsightCard key={item.title} icon={item.icon} title={`${item.title} • ${item.priority}`} text={item.text} />)}
+      </section>
+    </>
+  );
 }
 
 function ReportsView() {
@@ -1542,9 +1787,17 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
   const save = async () => {
     setStatus("Salvando...");
     try {
+      const payloadToSave = {
+        temperature_low: settings.temperature_low,
+        temperature_high: settings.temperature_high,
+        humidity_low: settings.humidity_low,
+        humidity_high: settings.humidity_high,
+        co2_high: settings.co2_high,
+      };
       const res = await fetch(`${N8N_BASE}/fleury-settings`, {
         method: "POST",
-        body: JSON.stringify(settings),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payloadToSave),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await parseResponseJSON<any>(res, "Salvar configurações").catch(() => null);
@@ -1567,9 +1820,9 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
     </label>
   );
 
-  return <><PageHeader title="Configurações" description="Limites de alarmes associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Limites ambientais</div><div className="grid grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ baixo" k="co2_low" unit="ppm" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
+  return <><PageHeader title="Configurações" description="Limites de alarmes associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="flex items-start justify-between gap-3 mb-3"><div><div className="text-base font-semibold">Limites ambientais</div><div className="text-xs text-muted-foreground mt-1">CO₂ possui somente alarme de concentração alta.</div></div><ShieldCheck className="h-5 w-5 text-success" /></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Regras de CO₂: <span className="text-foreground">somente limite alto</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
 }
 
-function MiniStat({ icon: Icon, label, value }: { icon: any; label: string; value: any }) { return <div className="glass-strong rounded-2xl p-3"><Icon className="h-4 w-4 text-info mb-2" /><div className="text-[11px] text-muted-foreground">{label}</div><div className="text-xl 2xl:text-2xl font-semibold mt-0.5">{value}</div></div>; }
+function MiniStat({ icon: Icon, label, value, tone = "info", caption }: { icon: any; label: string; value: any; tone?: "info" | "success" | "warning" | "critical"; caption?: string }) { const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "critical" ? "text-critical" : "text-info"; return <div className="glass-strong rounded-2xl p-3"><Icon className={`h-4 w-4 ${toneClass} mb-2`} /><div className="text-[11px] text-muted-foreground">{label}</div><div className="text-xl 2xl:text-2xl font-semibold mt-0.5">{value}</div>{caption && <div className="text-[11px] text-muted-foreground mt-1">{caption}</div>}</div>; }
 function InsightCard({ icon: Icon, title, text }: { icon: any; title: string; text: string }) { return <div className="glass-strong rounded-2xl p-5"><Icon className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{title}</div><div className="text-sm text-muted-foreground mt-2 leading-relaxed">{text}</div></div>; }
 function MiniSetting({ label, value }: { label: string; value: string }) { return <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5"><div className="text-xs text-muted-foreground">{label}</div><div className="text-lg font-semibold mt-1">{value}</div></div>; }
