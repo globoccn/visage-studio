@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   LayoutDashboard,
   Radio,
@@ -28,6 +28,10 @@ import {
   BatteryMedium,
   Search,
   CalendarDays,
+  LogOut,
+  Users,
+  Lock,
+  Eye,
 } from "lucide-react";
 import {
   AreaChart,
@@ -47,6 +51,7 @@ import floorPlan from "@/assets/floor-plan-fleury-top.png";
 import ccnLogo from "@/assets/ccn-logo-branco.png";
 import sensorEm300Image from "@/assets/em300-th.webp";
 import sensorAm103Image from "@/assets/amc103l.webp";
+import loginReference from "@/assets/login-fleury-reference.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -61,6 +66,7 @@ export const Route = createFileRoute("/")({
 type Period = "today" | "week" | "month";
 type Layer = "temperature" | "humidity" | "co2";
 type View = "dashboard" | "sensors" | "history" | "alarms" | "insights" | "reports" | "settings";
+type UserRole = "admin" | "operacional";
 
 type Sensor = {
   dev_eui: string;
@@ -124,6 +130,26 @@ type AlarmSettings = {
   co2_high: number;
 };
 
+type AuthUser = {
+  id?: number | string;
+  name: string;
+  username: string;
+  role: UserRole;
+  active?: boolean;
+  last_login?: string | null;
+};
+
+type AuthState = {
+  token: string;
+  user: AuthUser;
+  expires_at?: string | null;
+};
+
+type FleuryUser = AuthUser & {
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
 type ApiState = {
   loading: boolean;
   error: string | null;
@@ -131,6 +157,56 @@ type ApiState = {
 
 const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://fleury-bh-n8n.gpfgqx.easypanel.host/webhook";
 const ENABLE_MOCKS = (import.meta as any).env?.VITE_ENABLE_MOCKS === "true";
+
+const AUTH_STORAGE_KEY = "fleury_auth_session";
+
+function isAdmin(user?: AuthUser | null) {
+  return user?.role === "admin";
+}
+
+function normalizeAuthUser(raw: any): AuthUser {
+  const role = raw?.role === "admin" ? "admin" : "operacional";
+  return {
+    id: raw?.id,
+    name: raw?.name || raw?.username || "Usuário",
+    username: raw?.username || raw?.email || "usuario",
+    role,
+    active: raw?.active !== false,
+    last_login: raw?.last_login || raw?.lastLogin || null,
+  };
+}
+
+function readStoredAuth(): AuthState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.token || !parsed?.user) return null;
+    if (parsed.expires_at && new Date(parsed.expires_at).getTime() < Date.now()) {
+      window.localStorage.removeItem(AUTH_STORAGE_KEY);
+      return null;
+    }
+    return { token: String(parsed.token), user: normalizeAuthUser(parsed.user), expires_at: parsed.expires_at || null };
+  } catch {
+    return null;
+  }
+}
+
+function saveStoredAuth(auth: AuthState | null) {
+  if (typeof window === "undefined") return;
+  if (!auth) window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  else window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+}
+
+async function fetchAuthJSON<T>(url: string, token?: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers || {});
+  if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  const res = await fetch(url, { ...init, headers, cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await parseResponseJSON<T>(res, url);
+}
 
 const DEFAULT_ALARM_SETTINGS: AlarmSettings = {
   temperature_low: 21.5,
@@ -1318,7 +1394,85 @@ function RecentAlerts({ alarms, onNavigate }: { alarms: any[]; onNavigate?: (vie
   return <section className="dashboard-alerts glass-strong rounded-2xl p-2 flex flex-col lg:flex-row lg:items-center gap-2 h-[58px] shrink-0 overflow-hidden"><div className="text-sm font-medium shrink-0 lg:w-36">Alertas recentes</div>{list.length === 0 ? <div className="flex-1 text-xs text-muted-foreground">Nenhum alerta ativo com os limites configurados.</div> : <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-3 min-w-0">{list.slice(0, 3).map((a, i) => <div key={i} className="flex items-center gap-2 p-2 rounded-xl bg-white/[0.03] border border-white/5 min-w-0"><div className="h-8 w-8 rounded-lg grid place-items-center shrink-0 text-warning bg-warning/15"><AlertTriangle className="h-4 w-4" /></div><div className="flex-1 min-w-0"><div className="text-xs font-medium truncate">{a.sensor_id || a.sensorId}</div><div className="text-[11px] text-muted-foreground truncate">{alarmLabel(a.type)} • {formatDecimal(Number(a.value), a.unit === "ppm" ? 0 : 1)} {a.unit || ""}</div></div><div className="text-right shrink-0"><div className="text-[11px] font-medium text-warning">• Atenção</div><div className="text-[10px] text-muted-foreground">{formatTimePt(a.timestamp)}</div></div></div>)}</div>}<button onClick={() => onNavigate?.("alarms")} className="text-xs text-info hover:underline shrink-0">Ver todos<br/>os alertas</button></section>;
 }
 
+
+function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
+  const [username, setUsername] = useState("admin");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [remember, setRemember] = useState(true);
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  const login = async (event: FormEvent) => {
+    event.preventDefault();
+    setStatus("");
+    setLoading(true);
+    try {
+      const payload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-login`, undefined, {
+        method: "POST",
+        body: JSON.stringify({ username: username.trim(), password }),
+      });
+      if (payload?.ok === false) throw new Error(payload?.error || "Credenciais inválidas");
+      const token = payload?.token || payload?.session?.token || payload?.access_token;
+      const user = normalizeAuthUser(payload?.user || payload?.data?.user || payload);
+      if (!token) throw new Error("Token ausente na resposta do login");
+      const auth = { token, user, expires_at: payload?.expires_at || payload?.expiresAt || null };
+      if (remember) saveStoredAuth(auth);
+      onLogin(auth);
+    } catch (error: any) {
+      setStatus(error?.message === "Token ausente na resposta do login" ? "Login recebido sem token. Verifique o Workflow 07." : "Usuário ou senha inválidos.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full overflow-hidden bg-[#020817] text-foreground grid grid-cols-1 lg:grid-cols-2">
+      <section className="relative hidden lg:block overflow-hidden">
+        <div className="absolute inset-0 bg-cover bg-left" style={{ backgroundImage: `url(${loginReference})`, backgroundSize: "200% 100%", backgroundPosition: "left center" }} />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/20 via-black/10 to-[#020817]/15" />
+      </section>
+      <section className="relative min-h-screen flex items-center justify-center px-6 py-10 bg-[radial-gradient(circle_at_20%_10%,rgba(14,165,233,.16),transparent_34%),radial-gradient(circle_at_90%_90%,rgba(225,29,72,.10),transparent_30%)]">
+        <div className="absolute inset-0 opacity-25" style={{ backgroundImage: "linear-gradient(120deg, rgba(14,165,233,.18) 1px, transparent 1px), linear-gradient(60deg, rgba(14,165,233,.10) 1px, transparent 1px)", backgroundSize: "120px 120px" }} />
+        <img src={ccnLogo} alt="CCN Automação" className="absolute right-8 top-8 w-44 opacity-95" />
+        <form onSubmit={login} className="relative z-10 w-full max-w-[620px] rounded-[2rem] border border-white/12 bg-[#071426]/78 shadow-[0_24px_80px_rgba(0,0,0,.45)] backdrop-blur-2xl p-8 xl:p-12">
+          <div className="text-center mb-8">
+            <div className="text-6xl xl:text-7xl font-black italic tracking-tight"><span className="text-[#e91e63]">f</span><span className="text-white/70">leury</span></div>
+            <div className="mt-4 h-px w-full bg-gradient-to-r from-transparent via-[#e91e63]/70 to-transparent" />
+          </div>
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold">Acesse sua conta</h1>
+            <p className="text-sm text-muted-foreground mt-2">Entre com suas credenciais para continuar</p>
+          </div>
+          <div className="space-y-4">
+            <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
+              <User className="h-5 w-5 text-muted-foreground" />
+              <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-transparent outline-none text-base" placeholder="Usuário" autoComplete="username" />
+            </label>
+            <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
+              <Lock className="h-5 w-5 text-muted-foreground" />
+              <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="w-full bg-transparent outline-none text-base" placeholder="Senha" autoComplete="current-password" />
+              <button type="button" onClick={() => setShowPassword((v) => !v)} className="text-muted-foreground hover:text-foreground"><Eye className="h-5 w-5" /></button>
+            </label>
+          </div>
+          <div className="flex items-center justify-between mt-5 text-sm">
+            <label className="flex items-center gap-2 text-muted-foreground"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[#e91e63]" /> Lembrar-me</label>
+            <span className="text-muted-foreground">Sistema de Monitoramento Ambiental</span>
+          </div>
+          <button disabled={loading} className="mt-7 w-full rounded-2xl bg-gradient-to-r from-[#e91e63] to-[#f43f5e] py-4 text-lg font-bold shadow-[0_14px_40px_rgba(233,30,99,.25)] hover:brightness-110 disabled:opacity-60 transition-all">
+            {loading ? "Entrando..." : "Entrar"}
+          </button>
+          {status && <div className="mt-4 rounded-xl border border-critical/25 bg-critical/10 px-3 py-2 text-sm text-critical">{status}</div>}
+          <div className="mt-8 text-center text-sm text-muted-foreground">© CCN Automação LTDA. Todos os direitos reservados.</div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
 function App() {
+  const [auth, setAuth] = useState<AuthState | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [view, setView] = useState<View>("dashboard");
   const [period, setPeriod] = useState<Period>("today");
   const [layer, setLayer] = useState<Layer>("temperature");
@@ -1329,6 +1483,27 @@ function App() {
   const [apiState, setApiState] = useState<ApiState>({ loading: true, error: null });
 
   useEffect(() => {
+    setAuth(readStoredAuth());
+    setAuthChecked(true);
+  }, []);
+
+  useEffect(() => {
+    if (authChecked && auth?.user?.role !== "admin" && view === "settings") setView("dashboard");
+  }, [authChecked, auth, view]);
+
+  const handleLogin = (nextAuth: AuthState) => {
+    setAuth(nextAuth);
+    setView("dashboard");
+  };
+
+  const handleLogout = () => {
+    saveStoredAuth(null);
+    setAuth(null);
+    setView("dashboard");
+  };
+
+  useEffect(() => {
+    if (!auth) return;
     let mounted = true;
     const load = async () => {
       setApiState((prev) => ({ ...prev, loading: true }));
@@ -1380,7 +1555,7 @@ function App() {
     load();
     const timer = setInterval(load, 5 * 60 * 1000);
     return () => { mounted = false; clearInterval(timer); };
-  }, [period]);
+  }, [period, auth]);
 
   useEffect(() => {
     if (!selectedSensor || !dashboard?.sensors?.length) return;
@@ -1388,6 +1563,14 @@ function App() {
     if (refreshed && refreshed !== selectedSensor) setSelectedSensor(refreshed);
   }, [dashboard, selectedSensor]);
 
+  if (!authChecked) {
+    return <div className="min-h-screen w-full bg-[#020817] grid place-items-center text-muted-foreground">Carregando sessão...</div>;
+  }
+
+  if (!auth) return <LoginPage onLogin={handleLogin} />;
+
+  const currentUser = auth.user;
+  const canAccessSettings = isAdmin(currentUser);
   const activeDashboard = dashboard || emptyDashboard();
 
   return (
@@ -1401,13 +1584,13 @@ function App() {
           <SidebarItem icon={Bell} label="Alarmes" active={view === "alarms"} onClick={() => setView("alarms")} />
           <SidebarItem icon={Brain} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
           <SidebarItem icon={FileText} label="Relatórios" active={view === "reports"} onClick={() => setView("reports")} />
-          <SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} />
+          {canAccessSettings && <SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} />}
         </nav>
         <div className="mt-auto flex flex-col gap-3">
           <div className="px-2 pb-1"><img src={ccnLogo} alt="CCN Automação" className="w-36 max-w-full opacity-95" /></div>
           <div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div></div>
           <div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Bell className="h-4 w-4 text-critical" /><span className="text-2xl font-bold">{activeDashboard.kpis.activeAlarms}</span></div><div className="text-xs text-muted-foreground mt-1">Alertas ativos</div><button onClick={() => setView("alarms")} className="text-[11px] text-info mt-1 hover:underline">Ver todos</button></div>
-          <div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0"><div className="text-xs font-medium truncate">Administrador</div><div className="text-[10px] text-muted-foreground truncate">Fleury Unidade SP</div></div></div>
+          <div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="text-xs font-medium truncate">{currentUser.name}</div><div className="text-[10px] text-muted-foreground truncate">{currentUser.role === "admin" ? "Administrador" : "Operacional"}</div></div><button onClick={handleLogout} className="text-muted-foreground hover:text-foreground" title="Sair"><LogOut className="h-4 w-4" /></button></div>
         </div>
       </aside>
       <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
@@ -1418,7 +1601,7 @@ function App() {
         {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} settings={settings} />}
         {view === "insights" && <InsightsView dashboard={activeDashboard} history={history} />}
         {view === "reports" && <ReportsView />}
-        {view === "settings" && <SettingsView sensors={activeDashboard.sensors} initialSettings={settings} onSettingsSaved={setSettings} />}
+        {view === "settings" && canAccessSettings && <SettingsView sensors={activeDashboard.sensors} initialSettings={settings} onSettingsSaved={setSettings} auth={auth} />}
       </main>
     </div>
   );
@@ -1776,15 +1959,33 @@ function ReportsView() {
   return <><PageHeader title="Relatórios" description="Base para PDFs, CSVs e relatórios executivos diário, semanal, mensal e personalizado." /><section className="grid grid-cols-1 md:grid-cols-3 gap-4">{["Relatório diário", "Relatório semanal", "Relatório mensal"].map((title) => <div key={title} className="glass-strong rounded-2xl p-5"><FileText className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{title}</div><div className="text-sm text-muted-foreground mt-2">Temperatura, umidade, CO₂, alarmes, KPIs, insights e mapa térmico médio.</div><button className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2"><Download className="h-4 w-4" /> Gerar PDF</button></div>)}</section></>;
 }
 
-function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void }) {
+function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void; auth: AuthState }) {
+  const [tab, setTab] = useState<"limits" | "users">("limits");
   const [settings, setSettings] = useState<AlarmSettings>(initialSettings);
   const [status, setStatus] = useState<string>("");
+  const [users, setUsers] = useState<FleuryUser[]>([]);
+  const [usersStatus, setUsersStatus] = useState<string>("");
+  const [newUser, setNewUser] = useState({ name: "", username: "", password: "", role: "operacional" as UserRole });
 
   useEffect(() => {
     fetchJSON<any>(`${N8N_BASE}/fleury-settings`)
       .then((payload) => setSettings(normalizeSettings(payload)))
       .catch(() => setStatus("Não foi possível carregar os limites atuais."));
   }, []);
+
+  const loadUsers = async () => {
+    setUsersStatus("Carregando usuários...");
+    try {
+      const payload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-users`, auth.token);
+      const list = Array.isArray(payload) ? payload : Array.isArray(payload?.users) ? payload.users : Array.isArray(payload?.data) ? payload.data : [];
+      setUsers(list.map((u: any) => normalizeAuthUser(u)));
+      setUsersStatus("");
+    } catch {
+      setUsersStatus("Não foi possível carregar usuários. Verifique o Workflow 07.");
+    }
+  };
+
+  useEffect(() => { if (tab === "users") loadUsers(); }, [tab]);
 
   const update = (key: keyof typeof settings, value: string) => {
     setSettings((prev) => ({ ...prev, [key]: Number(value) }));
@@ -1802,7 +2003,7 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
       };
       const res = await fetch(`${N8N_BASE}/fleury-settings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${auth.token}` },
         body: JSON.stringify(payloadToSave),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -1816,6 +2017,26 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
     }
   };
 
+  const createUser = async () => {
+    if (!newUser.name.trim() || !newUser.username.trim() || !newUser.password.trim()) {
+      setUsersStatus("Preencha nome, usuário e senha.");
+      return;
+    }
+    setUsersStatus("Criando usuário...");
+    try {
+      const payload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-users`, auth.token, {
+        method: "POST",
+        body: JSON.stringify(newUser),
+      });
+      if (payload?.ok === false) throw new Error(payload?.error || "Falha ao criar usuário");
+      setNewUser({ name: "", username: "", password: "", role: "operacional" });
+      setUsersStatus("Usuário criado com sucesso.");
+      await loadUsers();
+    } catch {
+      setUsersStatus("Não foi possível criar o usuário. Verifique usuário duplicado ou permissões.");
+    }
+  };
+
   const Field = ({ label, k, unit }: { label: string; k: keyof typeof settings; unit: string }) => (
     <label className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
       <div className="text-xs text-muted-foreground mb-1">{label}</div>
@@ -1826,7 +2047,56 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: 
     </label>
   );
 
-  return <><PageHeader title="Configurações" description="Limites de alarmes associados às medidas ambientais."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader><div className="grid grid-cols-1 xl:grid-cols-2 gap-4"><div className="glass-strong rounded-2xl p-5"><div className="flex items-start justify-between gap-3 mb-3"><div><div className="text-base font-semibold">Limites ambientais</div><div className="text-xs text-muted-foreground mt-1">CO₂ possui somente alarme de concentração alta.</div></div><ShieldCheck className="h-5 w-5 text-success" /></div><div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div><button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}</div><div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Regras de CO₂: <span className="text-foreground">somente limite alto</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div></div></>;
+  return (
+    <>
+      <PageHeader title="Configurações" description="Administração do sistema, limites ambientais e usuários."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader>
+      <div className="flex gap-2 mb-4">
+        <button onClick={() => setTab("limits")} className={`rounded-xl px-4 py-2 text-sm border transition-colors ${tab === "limits" ? "bg-info/15 border-info/40 text-info" : "glass text-muted-foreground"}`}>Limites</button>
+        <button onClick={() => setTab("users")} className={`rounded-xl px-4 py-2 text-sm border transition-colors ${tab === "users" ? "bg-info/15 border-info/40 text-info" : "glass text-muted-foreground"}`}><Users className="inline h-4 w-4 mr-1" /> Usuários e acessos</button>
+      </div>
+      {tab === "limits" && (
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="glass-strong rounded-2xl p-5">
+            <div className="flex items-start justify-between gap-3 mb-3"><div><div className="text-base font-semibold">Limites ambientais</div><div className="text-xs text-muted-foreground mt-1">CO₂ possui somente alarme de concentração alta.</div></div><ShieldCheck className="h-5 w-5 text-success" /></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div>
+            <button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}
+          </div>
+          <div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Regras de CO₂: <span className="text-foreground">somente limite alto</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div>
+        </div>
+      )}
+      {tab === "users" && (
+        <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.4fr] gap-4">
+          <div className="glass-strong rounded-2xl p-5">
+            <div className="text-base font-semibold">Novo usuário</div>
+            <div className="text-xs text-muted-foreground mt-1 mb-4">Administradores podem criar perfis administrativos ou operacionais.</div>
+            <div className="space-y-3">
+              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Nome" value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} />
+              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Usuário" value={newUser.username} onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))} />
+              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Senha temporária" type="password" value={newUser.password} onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))} />
+              <select className="w-full glass rounded-xl px-3 py-2 outline-none bg-[#071426]" value={newUser.role} onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value as UserRole }))}>
+                <option value="operacional">Operacional</option>
+                <option value="admin">Administrador</option>
+              </select>
+              <button onClick={createUser} className="w-full rounded-xl bg-info/20 border border-info/40 px-4 py-2 text-sm font-medium text-info hover:bg-info/25 transition-colors">Criar usuário</button>
+            </div>
+            {usersStatus && <div className="mt-3 text-xs text-muted-foreground">{usersStatus}</div>}
+          </div>
+          <div className="glass-strong rounded-2xl p-5 overflow-hidden">
+            <div className="flex items-center justify-between mb-4"><div><div className="text-base font-semibold">Usuários cadastrados</div><div className="text-xs text-muted-foreground mt-1">Controle de acesso ao supervisório ambiental.</div></div><button onClick={loadUsers} className="glass rounded-xl px-3 py-2 text-xs hover:border-info/50">Atualizar</button></div>
+            <div className="space-y-2 max-h-[56vh] overflow-auto pr-1">
+              {users.length === 0 ? <div className="text-sm text-muted-foreground">Nenhum usuário retornado pelo Workflow 07.</div> : users.map((user) => (
+                <div key={`${user.id || user.username}`} className="rounded-xl border border-white/8 bg-white/[0.03] p-3 flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div>
+                  <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user.name}</div><div className="text-xs text-muted-foreground truncate">{user.username} • {user.role === "admin" ? "Administrador" : "Operacional"}</div></div>
+                  <div className={`text-xs ${user.active === false ? "text-critical" : "text-success"}`}>{user.active === false ? "Inativo" : "Ativo"}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function MiniStat({ icon: Icon, label, value, tone = "info", caption }: { icon: any; label: string; value: any; tone?: "info" | "success" | "warning" | "critical"; caption?: string }) { const toneClass = tone === "success" ? "text-success" : tone === "warning" ? "text-warning" : tone === "critical" ? "text-critical" : "text-info"; return <div className="glass-strong rounded-2xl p-3"><Icon className={`h-4 w-4 ${toneClass} mb-2`} /><div className="text-[11px] text-muted-foreground">{label}</div><div className="text-xl 2xl:text-2xl font-semibold mt-0.5">{value}</div>{caption && <div className="text-[11px] text-muted-foreground mt-1">{caption}</div>}</div>; }
