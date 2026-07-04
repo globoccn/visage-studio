@@ -1445,15 +1445,21 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
             <p className="text-sm text-muted-foreground mt-2">Entre com suas credenciais para continuar</p>
           </div>
           <div className="space-y-4">
-            <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
-              <User className="h-5 w-5 text-muted-foreground" />
-              <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-transparent outline-none text-base" placeholder="Usuário" autoComplete="username" />
-            </label>
-            <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
-              <Lock className="h-5 w-5 text-muted-foreground" />
-              <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="w-full bg-transparent outline-none text-base" placeholder="Senha" autoComplete="current-password" />
-              <button type="button" onClick={() => setShowPassword((v) => !v)} className="text-muted-foreground hover:text-foreground"><Eye className="h-5 w-5" /></button>
-            </label>
+            <div>
+              <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
+                <User className="h-5 w-5 text-muted-foreground" />
+                <input value={username} onChange={(e) => setUsername(e.target.value)} className="w-full bg-transparent outline-none text-base" placeholder="Usuário" autoComplete="username" />
+              </label>
+              <div className="mt-1 ml-2 text-[11px] text-muted-foreground">Exemplo: nome.sobrenome</div>
+            </div>
+            <div>
+              <label className="flex items-center gap-4 rounded-2xl border border-white/12 bg-white/[0.03] px-4 py-4 focus-within:border-[#e91e63]/70 transition-colors">
+                <Lock className="h-5 w-5 text-muted-foreground" />
+                <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPassword ? "text" : "password"} className="w-full bg-transparent outline-none text-base" placeholder="Senha" autoComplete="current-password" />
+                <button type="button" onClick={() => setShowPassword((v) => !v)} className="text-muted-foreground hover:text-foreground"><Eye className="h-5 w-5" /></button>
+              </label>
+              <div className="mt-1 ml-2 text-[11px] text-muted-foreground">Para novos usuários: senha numérica cadastrada pelo administrador.</div>
+            </div>
           </div>
           <div className="flex items-center justify-between mt-5 text-sm">
             <label className="flex items-center gap-2 text-muted-foreground"><input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="h-4 w-4 accent-[#e91e63]" /> Lembrar-me</label>
@@ -1960,12 +1966,12 @@ function ReportsView() {
 }
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void; auth: AuthState }) {
-  const [tab, setTab] = useState<"limits" | "users">("limits");
   const [settings, setSettings] = useState<AlarmSettings>(initialSettings);
   const [status, setStatus] = useState<string>("");
   const [users, setUsers] = useState<FleuryUser[]>([]);
   const [usersStatus, setUsersStatus] = useState<string>("");
   const [newUser, setNewUser] = useState({ name: "", username: "", password: "", role: "operacional" as UserRole });
+  const [savingUserId, setSavingUserId] = useState<string | number | null>(null);
 
   useEffect(() => {
     fetchJSON<any>(`${N8N_BASE}/fleury-settings`)
@@ -1981,11 +1987,11 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
       setUsers(list.map((u: any) => normalizeAuthUser(u)));
       setUsersStatus("");
     } catch {
-      setUsersStatus("Não foi possível carregar usuários. Verifique o Workflow 07.");
+      setUsersStatus("Não foi possível carregar usuários. Verifique o Workflow 07 v2.1.");
     }
   };
 
-  useEffect(() => { if (tab === "users") loadUsers(); }, [tab]);
+  useEffect(() => { loadUsers(); }, []);
 
   const update = (key: keyof typeof settings, value: string) => {
     setSettings((prev) => ({ ...prev, [key]: Number(value) }));
@@ -2033,7 +2039,31 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
       setUsersStatus("Usuário criado com sucesso.");
       await loadUsers();
     } catch {
-      setUsersStatus("Não foi possível criar o usuário. Verifique usuário duplicado ou permissões.");
+      setUsersStatus("Não foi possível criar o usuário. Verifique usuário duplicado, senha mínima ou permissões.");
+    }
+  };
+
+  const toggleUserStatus = async (user: FleuryUser) => {
+    if (!user.id) return;
+    if (String(user.id) === String(auth.user.id)) {
+      setUsersStatus("Você não pode desativar o próprio usuário logado.");
+      return;
+    }
+    const nextActive = user.active === false;
+    setSavingUserId(user.id);
+    setUsersStatus(nextActive ? "Ativando usuário..." : "Desativando usuário...");
+    try {
+      const payload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-users-status`, auth.token, {
+        method: "POST",
+        body: JSON.stringify({ id: user.id, active: nextActive }),
+      });
+      if (payload?.ok === false) throw new Error(payload?.error || "Falha ao alterar status");
+      setUsersStatus(nextActive ? "Usuário ativado." : "Usuário desativado.");
+      await loadUsers();
+    } catch {
+      setUsersStatus("Não foi possível alterar o status do usuário pelo Workflow 07 v2.1.");
+    } finally {
+      setSavingUserId(null);
     }
   };
 
@@ -2041,60 +2071,119 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
     <label className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
       <div className="text-xs text-muted-foreground mb-1">{label}</div>
       <div className="flex items-center gap-2">
-        <input className="w-full bg-transparent border border-white/10 rounded-lg px-2 py-1 text-lg font-semibold outline-none" type="number" step="0.1" value={settings[k]} onChange={(e) => update(k, e.target.value)} />
+        <input className="w-full bg-transparent border border-white/10 rounded-lg px-2 py-1 text-lg font-semibold outline-none focus:border-info/50" type="number" step="0.1" value={settings[k]} onChange={(e) => update(k, e.target.value)} />
         <span className="text-xs text-muted-foreground">{unit}</span>
       </div>
     </label>
   );
 
+  const RoleButton = ({ role, label }: { role: UserRole; label: string }) => (
+    <button
+      type="button"
+      onClick={() => setNewUser((p) => ({ ...p, role }))}
+      className={`rounded-xl border px-3 py-2 text-sm transition-colors ${newUser.role === role ? "bg-info/20 border-info/50 text-info" : "bg-white/[0.03] border-white/10 text-muted-foreground hover:text-foreground"}`}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <>
       <PageHeader title="Configurações" description="Administração do sistema, limites ambientais e usuários."><SlidersHorizontal className="h-5 w-5 text-info" /></PageHeader>
-      <div className="flex gap-2 mb-4">
-        <button onClick={() => setTab("limits")} className={`rounded-xl px-4 py-2 text-sm border transition-colors ${tab === "limits" ? "bg-info/15 border-info/40 text-info" : "glass text-muted-foreground"}`}>Limites</button>
-        <button onClick={() => setTab("users")} className={`rounded-xl px-4 py-2 text-sm border transition-colors ${tab === "users" ? "bg-info/15 border-info/40 text-info" : "glass text-muted-foreground"}`}><Users className="inline h-4 w-4 mr-1" /> Usuários e acessos</button>
-      </div>
-      {tab === "limits" && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-          <div className="glass-strong rounded-2xl p-5">
-            <div className="flex items-start justify-between gap-3 mb-3"><div><div className="text-base font-semibold">Limites ambientais</div><div className="text-xs text-muted-foreground mt-1">CO₂ possui somente alarme de concentração alta.</div></div><ShieldCheck className="h-5 w-5 text-success" /></div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3"><Field label="Temperatura baixa" k="temperature_low" unit="°C" /><Field label="Temperatura alta" k="temperature_high" unit="°C" /><Field label="Umidade baixa" k="humidity_low" unit="%" /><Field label="Umidade alta" k="humidity_high" unit="%" /><Field label="CO₂ alto" k="co2_high" unit="ppm" /></div>
-            <button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>{status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}
-          </div>
-          <div className="glass-strong rounded-2xl p-5"><div className="text-base font-semibold mb-3">Monitoramento ambiental</div><div className="space-y-3 text-sm text-muted-foreground"><div>Sensores ativos: <span className="text-foreground">6 EM300-TH + 9 AM103L</span></div><div>Atualização dos indicadores: <span className="text-foreground">a cada 5 minutos</span></div><div>Histórico operacional: <span className="text-foreground">temperatura, umidade, CO₂ e bateria</span></div><div>Regras de CO₂: <span className="text-foreground">somente limite alto</span></div><div>Total monitorado: <span className="text-foreground">{sensors.length} sensores</span></div></div></div>
-        </div>
-      )}
-      {tab === "users" && (
-        <div className="grid grid-cols-1 xl:grid-cols-[0.9fr_1.4fr] gap-4">
-          <div className="glass-strong rounded-2xl p-5">
-            <div className="text-base font-semibold">Novo usuário</div>
-            <div className="text-xs text-muted-foreground mt-1 mb-4">Administradores podem criar perfis administrativos ou operacionais.</div>
-            <div className="space-y-3">
-              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Nome" value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} />
-              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Usuário" value={newUser.username} onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))} />
-              <input className="w-full glass rounded-xl px-3 py-2 outline-none" placeholder="Senha temporária" type="password" value={newUser.password} onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value }))} />
-              <select className="w-full glass rounded-xl px-3 py-2 outline-none bg-[#071426]" value={newUser.role} onChange={(e) => setNewUser((p) => ({ ...p, role: e.target.value as UserRole }))}>
-                <option value="operacional">Operacional</option>
-                <option value="admin">Administrador</option>
-              </select>
-              <button onClick={createUser} className="w-full rounded-xl bg-info/20 border border-info/40 px-4 py-2 text-sm font-medium text-info hover:bg-info/25 transition-colors">Criar usuário</button>
+      <div className="grid grid-cols-1 xl:grid-cols-[0.95fr_1.05fr] gap-4">
+        <div className="glass-strong rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div>
+              <div className="text-base font-semibold">Limites ambientais</div>
+              <div className="text-xs text-muted-foreground mt-1">CO₂ possui somente alarme de concentração alta.</div>
             </div>
+            <ShieldCheck className="h-5 w-5 text-success" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Field label="Temperatura baixa" k="temperature_low" unit="°C" />
+            <Field label="Temperatura alta" k="temperature_high" unit="°C" />
+            <Field label="Umidade baixa" k="humidity_low" unit="%" />
+            <Field label="Umidade alta" k="humidity_high" unit="%" />
+            <Field label="CO₂ alto" k="co2_high" unit="ppm" />
+          </div>
+          <button onClick={save} className="mt-4 glass rounded-xl px-4 py-2 text-sm font-medium hover:border-info/50 transition-colors">Salvar limites</button>
+          {status && <div className="mt-3 text-xs text-muted-foreground">{status}</div>}
+        </div>
+
+        <div className="glass-strong rounded-2xl p-5">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div>
+              <div className="text-base font-semibold">Usuários e acessos</div>
+              <div className="text-xs text-muted-foreground mt-1">Cadastro e controle de perfis administrativos e operacionais.</div>
+            </div>
+            <button onClick={loadUsers} className="glass rounded-xl px-3 py-2 text-xs hover:border-info/50">Atualizar</button>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-white/[0.03] p-4 mb-4">
+            <div className="text-sm font-semibold mb-3">Novo usuário</div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label>
+                <div className="text-xs text-muted-foreground mb-1">Nome completo</div>
+                <input className="w-full glass rounded-xl px-3 py-2 outline-none focus:border-info/50" placeholder="Ex.: João Silva" value={newUser.name} onChange={(e) => setNewUser((p) => ({ ...p, name: e.target.value }))} />
+              </label>
+              <label>
+                <div className="text-xs text-muted-foreground mb-1">Usuário</div>
+                <input className="w-full glass rounded-xl px-3 py-2 outline-none focus:border-info/50" placeholder="Ex.: nome.sobrenome" value={newUser.username} onChange={(e) => setNewUser((p) => ({ ...p, username: e.target.value }))} />
+                <div className="text-[10px] text-muted-foreground mt-1">Login no formato nome.sobrenome</div>
+              </label>
+              <label>
+                <div className="text-xs text-muted-foreground mb-1">Senha</div>
+                <input className="w-full glass rounded-xl px-3 py-2 outline-none focus:border-info/50" placeholder="Ex.: 123456" inputMode="numeric" type="password" value={newUser.password} onChange={(e) => setNewUser((p) => ({ ...p, password: e.target.value.replace(/\D/g, "") }))} />
+                <div className="text-[10px] text-muted-foreground mt-1">Somente números, mínimo de 6 dígitos.</div>
+              </label>
+              <div>
+                <div className="text-xs text-muted-foreground mb-1">Perfil</div>
+                <div className="grid grid-cols-2 gap-2">
+                  <RoleButton role="operacional" label="Operacional" />
+                  <RoleButton role="admin" label="Administrador" />
+                </div>
+              </div>
+            </div>
+            <button onClick={createUser} className="mt-4 rounded-xl bg-info/20 border border-info/40 px-4 py-2 text-sm font-medium text-info hover:bg-info/25 transition-colors">Criar usuário</button>
             {usersStatus && <div className="mt-3 text-xs text-muted-foreground">{usersStatus}</div>}
           </div>
-          <div className="glass-strong rounded-2xl p-5 overflow-hidden">
-            <div className="flex items-center justify-between mb-4"><div><div className="text-base font-semibold">Usuários cadastrados</div><div className="text-xs text-muted-foreground mt-1">Controle de acesso ao supervisório ambiental.</div></div><button onClick={loadUsers} className="glass rounded-xl px-3 py-2 text-xs hover:border-info/50">Atualizar</button></div>
-            <div className="space-y-2 max-h-[56vh] overflow-auto pr-1">
-              {users.length === 0 ? <div className="text-sm text-muted-foreground">Nenhum usuário retornado pelo Workflow 07.</div> : users.map((user) => (
-                <div key={`${user.id || user.username}`} className="rounded-xl border border-white/8 bg-white/[0.03] p-3 flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div>
-                  <div className="flex-1 min-w-0"><div className="text-sm font-medium truncate">{user.name}</div><div className="text-xs text-muted-foreground truncate">{user.username} • {user.role === "admin" ? "Administrador" : "Operacional"}</div></div>
-                  <div className={`text-xs ${user.active === false ? "text-critical" : "text-success"}`}>{user.active === false ? "Inativo" : "Ativo"}</div>
+
+          <div className="overflow-hidden rounded-2xl border border-white/8">
+            <div className="grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.8fr] gap-3 px-3 py-2 bg-white/[0.04] text-[11px] uppercase tracking-wide text-muted-foreground">
+              <div>Nome</div><div>Usuário</div><div>Perfil</div><div>Último acesso</div><div className="text-right">Ações</div>
+            </div>
+            <div className="max-h-[42vh] overflow-auto">
+              {users.length === 0 ? (
+                <div className="p-4 text-sm text-muted-foreground">Nenhum usuário retornado pelo Workflow 07 v2.1.</div>
+              ) : users.map((user) => (
+                <div key={`${user.id || user.username}`} className={`grid grid-cols-[1.4fr_1fr_0.8fr_0.9fr_0.8fr] gap-3 px-3 py-3 items-center border-t border-white/8 ${user.active === false ? "opacity-60" : ""}`}>
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{user.name}</div>
+                      <div className={`text-[11px] ${user.active === false ? "text-critical" : "text-success"}`}>{user.active === false ? "Inativo" : "Ativo"}</div>
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground truncate">{user.username}</div>
+                  <div className="text-xs rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 w-fit">{user.role === "admin" ? "Admin" : "Operacional"}</div>
+                  <div className="text-xs text-muted-foreground">{formatDatePt(user.last_login)} {formatTimePt(user.last_login)}</div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      onClick={() => toggleUserStatus(user)}
+                      disabled={savingUserId === user.id || String(user.id) === String(auth.user.id)}
+                      className={`rounded-lg border px-2 py-1 text-xs transition-colors disabled:opacity-40 ${user.active === false ? "border-success/40 text-success bg-success/10" : "border-critical/40 text-critical bg-critical/10"}`}
+                      title={String(user.id) === String(auth.user.id) ? "Não é possível alterar o próprio usuário logado" : user.active === false ? "Ativar usuário" : "Desativar usuário"}
+                    >
+                      {user.active === false ? "Ativar" : "Desativar"}
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
           </div>
+          <div className="mt-3 text-[11px] text-muted-foreground">Edição de perfil e reset de senha dependem dos próximos endpoints do Workflow 07; esta versão está compatível com login, listagem, criação e ativação/desativação.</div>
         </div>
-      )}
+      </div>
     </>
   );
 }
