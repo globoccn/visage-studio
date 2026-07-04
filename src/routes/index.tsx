@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useId, useMemo, useState } from "react";
 import {
   LayoutDashboard,
-  Box,
   Radio,
   History,
   FileText,
@@ -61,7 +60,7 @@ export const Route = createFileRoute("/")({
 
 type Period = "today" | "week" | "month";
 type Layer = "temperature" | "humidity" | "co2";
-type View = "dashboard" | "plant" | "sensors" | "history" | "alarms" | "insights" | "reports" | "settings" | "network";
+type View = "dashboard" | "sensors" | "history" | "alarms" | "insights" | "reports" | "settings";
 
 type Sensor = {
   dev_eui: string;
@@ -739,6 +738,17 @@ function formatTimePt(value: Date | string | null | undefined) {
   return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function communicationStatus(sensor: Sensor | null | undefined) {
+  const timestamp = sensor?.timestamp;
+  if (!timestamp) return { label: "Sem leitura", className: "text-muted-foreground" };
+  const date = new Date(timestamp);
+  if (!isValidDate(date)) return { label: "Sem leitura", className: "text-muted-foreground" };
+  const ageMinutes = (Date.now() - date.getTime()) / 60000;
+  if (ageMinutes <= 15) return { label: "Online", className: "text-success" };
+  if (ageMinutes <= 30) return { label: "Atenção", className: "text-warning" };
+  return { label: "Offline", className: "text-critical" };
+}
+
 async function parseResponseJSON<T>(res: Response, context: string): Promise<T> {
   const text = await res.text();
   if (!text.trim()) {
@@ -1179,7 +1189,7 @@ function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; hist
         <span className="text-muted-foreground">Status</span><span className="text-success text-right">Online</span>
         <span className="text-muted-foreground">Última atualização</span><span className="text-right">{formatTimePt(s.timestamp)}</span>
         <span className="text-muted-foreground">Bateria</span><span className="text-right flex items-center justify-end gap-1.5">{formatInt(s.battery)}%<span className="inline-block w-10 h-1.5 rounded-full bg-white/10 overflow-hidden"><span className="block h-full bg-success" style={{ width: `${s.battery ?? 0}%` }} /></span></span>
-        <span className="text-muted-foreground">RSSI / SNR</span><span className="text-right text-success">{formatInt(s.rssi)} / {formatInt(s.snr)}</span>
+        <span className="text-muted-foreground">Comunicação</span><span className={`text-right ${communicationStatus(s).className}`}>{communicationStatus(s).label}</span>
       </div>
       <div className="pt-2 mt-1.5 border-t border-white/10 flex-1 min-h-0 flex flex-col">
         <div className="text-[11px] text-muted-foreground mb-1.5">Tendência do período</div>
@@ -1206,7 +1216,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
         <KpiCard label="Temp. mín." value={formatDecimal(data.kpis.temperatureMin)} unit="°C" delta="Limite frio 21,5 °C" deltaTone="down" color="#22d3ee" seed={2} />
         <KpiCard label="Temp. máx." value={formatDecimal(data.kpis.temperatureMax)} unit="°C" delta="Limite quente 25,0 °C" deltaTone="warn" color="#f97316" seed={3} />
         <KpiCard label="Umidade média" value={formatDecimal(data.kpis.humidityAvg, 0)} unit="%" delta="Faixa ideal 40% - 60%" deltaTone="up" color="#38bdf8" seed={4} />
-        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta={`Faixa ideal 400 - ${formatInt(settings.co2_high)} ppm`} deltaTone="up" color="#22c55e" seed={5} />
+        <KpiCard label="CO₂ médio" value={formatInt(data.kpis.co2Avg)} unit="ppm" delta={`Limite operacional ≤ ${formatInt(settings.co2_high)} ppm`} deltaTone="up" color="#22c55e" seed={5} />
         <KpiCard label="Conforto ambiental" value={`${comfort}`} unit="%" delta={`${data.kpis.activeAlarms} alarmes ativos`} color="#ef4444" seed={6} critical={data.kpis.activeAlarms > 0} />
       </section>
       <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 flex-1 min-h-0">
@@ -1384,7 +1394,15 @@ function App() {
     <div className="h-screen w-full flex overflow-hidden text-foreground">
       <aside className="hidden lg:flex h-screen w-[220px] shrink-0 flex-col gap-4 px-4 py-4 border-r border-sidebar-border bg-sidebar/60 backdrop-blur-xl overflow-hidden">
         <div className="px-2"><div className="text-2xl font-black tracking-tight">FLEURY</div><div className="text-[9px] tracking-[0.25em] text-muted-foreground mt-0.5">MEDICINA E SAÚDE</div></div>
-        <nav className="flex flex-col gap-0.5"><SidebarItem icon={LayoutDashboard} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} /><SidebarItem icon={Box} label="Planta Operacional" active={view === "plant"} onClick={() => setView("plant")} /><SidebarItem icon={Radio} label="Sensores" active={view === "sensors"} onClick={() => setView("sensors")} /><SidebarItem icon={History} label="Histórico" active={view === "history"} onClick={() => setView("history")} /><SidebarItem icon={Bell} label="Alarmes" active={view === "alarms"} onClick={() => setView("alarms")} /><SidebarItem icon={Brain} label="Insights" active={view === "insights"} onClick={() => setView("insights")} /><SidebarItem icon={FileText} label="Relatórios" active={view === "reports"} onClick={() => setView("reports")} /><SidebarItem icon={Wifi} label="Saúde da Rede" active={view === "network"} onClick={() => setView("network")} /><SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} /></nav>
+        <nav className="flex flex-col gap-0.5">
+          <SidebarItem icon={LayoutDashboard} label="Dashboard" active={view === "dashboard"} onClick={() => setView("dashboard")} />
+          <SidebarItem icon={Radio} label="Sensores" active={view === "sensors"} onClick={() => setView("sensors")} />
+          <SidebarItem icon={History} label="Histórico" active={view === "history"} onClick={() => setView("history")} />
+          <SidebarItem icon={Bell} label="Alarmes" active={view === "alarms"} onClick={() => setView("alarms")} />
+          <SidebarItem icon={Brain} label="Insights" active={view === "insights"} onClick={() => setView("insights")} />
+          <SidebarItem icon={FileText} label="Relatórios" active={view === "reports"} onClick={() => setView("reports")} />
+          <SidebarItem icon={Settings} label="Configurações" active={view === "settings"} onClick={() => setView("settings")} />
+        </nav>
         <div className="mt-auto flex flex-col gap-3">
           <div className="px-2 pb-1"><img src={ccnLogo} alt="CCN Automação" className="w-36 max-w-full opacity-95" /></div>
           <div className="glass rounded-2xl p-3.5"><div className="flex items-center gap-2"><Radio className="h-4 w-4 text-success" /><span className="text-2xl font-bold">{activeDashboard.sensorsOnline}</span></div><div className="text-xs text-muted-foreground mt-1">Sensores online</div></div>
@@ -1395,13 +1413,11 @@ function App() {
       <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
         {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{apiState.error}</div>}
         {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} settings={settings} />}
-        {view === "plant" && <PlantView period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={activeDashboard} history={history} setSelectedSensor={setSelectedSensor} />}
         {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} history={history} />}
         {view === "history" && <HistoryView period={period} setPeriod={setPeriod} history={history} />}
         {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} settings={settings} />}
         {view === "insights" && <InsightsView dashboard={activeDashboard} history={history} />}
         {view === "reports" && <ReportsView />}
-        {view === "network" && <NetworkView sensors={activeDashboard.sensors} />}
         {view === "settings" && <SettingsView sensors={activeDashboard.sensors} initialSettings={settings} onSettingsSaved={setSettings} />}
       </main>
     </div>
@@ -1758,16 +1774,6 @@ function InsightsView({ dashboard, history }: { dashboard: DashboardPayload; his
 
 function ReportsView() {
   return <><PageHeader title="Relatórios" description="Base para PDFs, CSVs e relatórios executivos diário, semanal, mensal e personalizado." /><section className="grid grid-cols-1 md:grid-cols-3 gap-4">{["Relatório diário", "Relatório semanal", "Relatório mensal"].map((title) => <div key={title} className="glass-strong rounded-2xl p-5"><FileText className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{title}</div><div className="text-sm text-muted-foreground mt-2">Temperatura, umidade, CO₂, alarmes, KPIs, insights e mapa térmico médio.</div><button className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2"><Download className="h-4 w-4" /> Gerar PDF</button></div>)}</section></>;
-}
-
-function NetworkView({ sensors }: { sensors: Sensor[] }) {
-  const rssiValues = sensors.map((s)=>s.rssi).filter((v): v is number => typeof v === "number");
-  const snrValues = sensors.map((s)=>s.snr).filter((v): v is number => typeof v === "number");
-  const batteryValues = sensors.map((s)=>s.battery).filter((v): v is number => typeof v === "number");
-  const avgRssi = rssiValues.length ? rssiValues.reduce((a,s)=>a+s,0)/rssiValues.length : null;
-  const avgSnr = snrValues.length ? snrValues.reduce((a,s)=>a+s,0)/snrValues.length : null;
-  const avgBattery = batteryValues.length ? batteryValues.reduce((a,s)=>a+s,0)/batteryValues.length : null;
-  return <><PageHeader title="Saúde da Rede" description="Monitoramento da qualidade de sinal e comunicação dos sensores ambientais." /><section className="grid grid-cols-1 md:grid-cols-4 gap-4"><MiniStat icon={Radio} label="Sensores online" value={sensors.filter((s)=>!!s.timestamp).length} /><MiniStat icon={Wifi} label="RSSI médio" value={formatInt(avgRssi)} /><MiniStat icon={Activity} label="SNR médio" value={formatDecimal(avgSnr)} /><MiniStat icon={BatteryMedium} label="Bateria média" value={`${formatInt(avgBattery)}%`} /></section><SensorsView sensors={sensors} history={null} /></>;
 }
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void }) {
