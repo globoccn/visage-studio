@@ -156,6 +156,7 @@ type ApiState = {
 };
 
 const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://fleury-bh-n8n.gpfgqx.easypanel.host/webhook";
+const N8N_DAILY_REPORT_PATH = (import.meta as any).env?.VITE_N8N_DAILY_REPORT_PATH || "fleury-report-daily-pdf";
 const ENABLE_MOCKS = (import.meta as any).env?.VITE_ENABLE_MOCKS === "true";
 
 const AUTH_STORAGE_KEY = "fleury_auth_session";
@@ -1969,7 +1970,7 @@ function ReportsView() {
     setGenerating("daily");
     setStatus("Gerando relatório diário...");
     try {
-      const response = await fetch(`${N8N_BASE}/fleury-report-daily`, {
+      const response = await fetch(`${N8N_BASE}/${N8N_DAILY_REPORT_PATH}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1992,7 +1993,7 @@ function ReportsView() {
         const typeInfo = contentType ? ` (${contentType})` : "";
         throw new Error(
           normalizedPreview
-            ? `O workflow respondeu conteúdo que não é PDF${typeInfo}: ${normalizedPreview}`
+            ? `O workflow respondeu conteúdo que não é PDF${typeInfo}. Verifique se o workflow v12 está ativo e se o botão aponta para /fleury-report-daily-pdf. Prévia: ${normalizedPreview}`
             : `O workflow não retornou um PDF válido${typeInfo}.`,
         );
       }
