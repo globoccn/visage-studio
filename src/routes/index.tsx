@@ -1962,7 +1962,53 @@ function InsightsView({ dashboard, history }: { dashboard: DashboardPayload; his
 }
 
 function ReportsView() {
-  return <><PageHeader title="Relatórios" description="Base para PDFs, CSVs e relatórios executivos diário, semanal, mensal e personalizado." /><section className="grid grid-cols-1 md:grid-cols-3 gap-4">{["Relatório diário", "Relatório semanal", "Relatório mensal"].map((title) => <div key={title} className="glass-strong rounded-2xl p-5"><FileText className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{title}</div><div className="text-sm text-muted-foreground mt-2">Temperatura, umidade, CO₂, alarmes, KPIs, insights e mapa térmico médio.</div><button className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2"><Download className="h-4 w-4" /> Gerar PDF</button></div>)}</section></>;
+  const [generating, setGenerating] = useState<string | null>(null);
+  const [status, setStatus] = useState<string>("");
+
+  const generateDailyReport = async () => {
+    setGenerating("daily");
+    setStatus("Gerando relatório diário...");
+    try {
+      const response = await fetch(`${N8N_BASE}/fleury-report-daily`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ timezone: "America/Sao_Paulo" }),
+        cache: "no-store",
+      });
+
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+      const blob = await response.blob();
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("pdf") && blob.type && !blob.type.includes("pdf")) {
+        const text = await blob.text();
+        throw new Error(text || "A resposta do workflow não retornou um PDF.");
+      }
+
+      const url = window.URL.createObjectURL(blob);
+      const date = new Date().toISOString().slice(0, 10);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `relatorio-diario-fleury-${date}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setStatus("Relatório diário gerado com sucesso.");
+    } catch (error: any) {
+      setStatus(`Não foi possível gerar o relatório diário: ${error?.message || "erro desconhecido"}`);
+    } finally {
+      setGenerating(null);
+    }
+  };
+
+  const reports = [
+    { key: "daily", title: "Relatório diário", enabled: true },
+    { key: "weekly", title: "Relatório semanal", enabled: false },
+    { key: "monthly", title: "Relatório mensal", enabled: false },
+  ];
+
+  return <><PageHeader title="Relatórios" description="Base para PDFs, CSVs e relatórios executivos diário, semanal, mensal e personalizado." /><section className="grid grid-cols-1 md:grid-cols-3 gap-4">{reports.map((report) => <div key={report.key} className="glass-strong rounded-2xl p-5"><FileText className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{report.title}</div><div className="text-sm text-muted-foreground mt-2">Temperatura, umidade, CO₂, alarmes, KPIs, insights e mapa térmico médio.</div><button disabled={!report.enabled || generating === report.key} onClick={report.key === "daily" ? generateDailyReport : undefined} className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"><Download className="h-4 w-4" /> {generating === report.key ? "Gerando..." : "Gerar PDF"}</button>{!report.enabled && <div className="text-xs text-muted-foreground mt-3">Em breve</div>}</div>)}</section>{status && <div className="mt-4 text-sm text-muted-foreground">{status}</div>}</>;
 }
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void; auth: AuthState }) {
