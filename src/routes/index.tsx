@@ -156,7 +156,11 @@ type ApiState = {
 };
 
 const N8N_BASE = (import.meta as any).env?.VITE_N8N_BASE_URL || "https://fleury-bh-n8n.gpfgqx.easypanel.host/webhook";
-const N8N_DAILY_REPORT_PATH = (import.meta as any).env?.VITE_N8N_DAILY_REPORT_PATH || "fleury-report-daily-pdf";
+const N8N_REPORT_PATHS = {
+  daily: (import.meta as any).env?.VITE_N8N_DAILY_REPORT_PATH || "fleury-report-daily-pdf",
+  weekly: (import.meta as any).env?.VITE_N8N_WEEKLY_REPORT_PATH || "fleury-report-weekly-pdf",
+  monthly: (import.meta as any).env?.VITE_N8N_MONTHLY_REPORT_PATH || "fleury-report-monthly-pdf",
+};
 const ENABLE_MOCKS = (import.meta as any).env?.VITE_ENABLE_MOCKS === "true";
 
 const AUTH_STORAGE_KEY = "fleury_auth_session";
@@ -1966,11 +1970,21 @@ function ReportsView() {
   const [generating, setGenerating] = useState<string | null>(null);
   const [status, setStatus] = useState<string>("");
 
-  const generateDailyReport = async () => {
-    setGenerating("daily");
-    setStatus("Gerando relatório diário...");
+  const reportLabels: Record<string, string> = {
+    daily: "diário",
+    weekly: "semanal",
+    monthly: "mensal",
+  };
+
+  const generateReportPdf = async (reportKey: "daily" | "weekly" | "monthly") => {
+    const label = reportLabels[reportKey];
+    const path = N8N_REPORT_PATHS[reportKey];
+
+    setGenerating(reportKey);
+    setStatus(`Gerando relatório ${label}...`);
+
     try {
-      const response = await fetch(`${N8N_BASE}/${N8N_DAILY_REPORT_PATH}`, {
+      const response = await fetch(`${N8N_BASE}/${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1993,7 +2007,7 @@ function ReportsView() {
         const typeInfo = contentType ? ` (${contentType})` : "";
         throw new Error(
           normalizedPreview
-            ? `O workflow respondeu conteúdo que não é PDF${typeInfo}. Verifique se o workflow v12 está ativo e se o botão aponta para /fleury-report-daily-pdf. Prévia: ${normalizedPreview}`
+            ? `O workflow respondeu conteúdo que não é PDF${typeInfo}. Verifique se o workflow está ativo e se o botão aponta para /${path}. Prévia: ${normalizedPreview}`
             : `O workflow não retornou um PDF válido${typeInfo}.`,
         );
       }
@@ -2003,26 +2017,49 @@ function ReportsView() {
       const date = new Date().toISOString().slice(0, 10);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `relatorio-diario-fleury-${date}.pdf`;
+      link.download = `relatorio-${label}-fleury-${date}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-      setStatus("Relatório diário gerado com sucesso.");
+      setStatus(`Relatório ${label} gerado com sucesso.`);
     } catch (error: any) {
-      setStatus(`Não foi possível gerar o relatório diário: ${error?.message || "erro desconhecido"}`);
+      setStatus(`Não foi possível gerar o relatório ${label}: ${error?.message || "erro desconhecido"}`);
     } finally {
       setGenerating(null);
     }
   };
 
   const reports = [
-    { key: "daily", title: "Relatório diário", enabled: true },
-    { key: "weekly", title: "Relatório semanal", enabled: false },
-    { key: "monthly", title: "Relatório mensal", enabled: false },
+    { key: "daily" as const, title: "Relatório diário" },
+    { key: "weekly" as const, title: "Relatório semanal" },
+    { key: "monthly" as const, title: "Relatório mensal" },
   ];
 
-  return <><PageHeader title="Relatórios" description="Base para PDFs, CSVs e relatórios executivos diário, semanal, mensal e personalizado." /><section className="grid grid-cols-1 md:grid-cols-3 gap-4">{reports.map((report) => <div key={report.key} className="glass-strong rounded-2xl p-5"><FileText className="h-5 w-5 text-info mb-4" /><div className="text-base font-semibold">{report.title}</div><div className="text-sm text-muted-foreground mt-2">Temperatura, umidade, CO₂, alarmes, KPIs, insights e mapa térmico médio.</div><button disabled={!report.enabled || generating === report.key} onClick={report.key === "daily" ? generateDailyReport : undefined} className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"><Download className="h-4 w-4" /> {generating === report.key ? "Gerando..." : "Gerar PDF"}</button>{!report.enabled && <div className="text-xs text-muted-foreground mt-3">Em breve</div>}</div>)}</section>{status && <div className="mt-4 text-sm text-muted-foreground">{status}</div>}</>;
+  return (
+    <>
+      <PageHeader title="Relatórios" description="Baixe o PDF da análise do período selecionado." />
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {reports.map((report) => (
+          <div key={report.key} className="glass-strong rounded-2xl p-5">
+            <FileText className="h-5 w-5 text-info mb-4" />
+            <div className="text-base font-semibold">{report.title}</div>
+            <div className="text-sm text-muted-foreground mt-2">
+              Temperatura, umidade, CO₂, alarmes, KPIs, insights e parecer técnico.
+            </div>
+            <button
+              disabled={generating === report.key}
+              onClick={() => generateReportPdf(report.key)}
+              className="mt-5 glass rounded-xl px-3 py-2 text-sm flex items-center gap-2 disabled:opacity-45 disabled:cursor-not-allowed"
+            >
+              <Download className="h-4 w-4" /> {generating === report.key ? "Gerando..." : "Gerar PDF"}
+            </button>
+          </div>
+        ))}
+      </section>
+      {status && <div className="mt-4 text-sm text-muted-foreground">{status}</div>}
+    </>
+  );
 }
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void; auth: AuthState }) {
