@@ -48,7 +48,6 @@ import {
   CartesianGrid,
 } from "recharts";
 import floorPlan from "@/assets/floor-plan-fleury-top.png";
-import floorHeatmapMask from "@/assets/floor-plan-heatmap-mask.png";
 import ccnLogo from "@/assets/ccn-logo-branco.png";
 import sensorEm300Image from "@/assets/em300-th.webp";
 import sensorAm103Image from "@/assets/amc103l.webp";
@@ -492,8 +491,8 @@ function normalizedHeatOpacity(layer: Layer, value: number, opacity: number) {
   const isYellowCo2 = layer === "co2" && value >= 900 && value <= 1000;
   const isGreenTemperature = layer === "temperature" && value >= 23 && value <= 24;
   const isIdealHumidity = layer === "humidity" && value >= 40 && value <= 60;
-  if (isYellowTemperature || isYellowCo2) return opacity * 0.82;
-  if (isGreenTemperature || isIdealHumidity) return opacity * 1.24;
+  if (isYellowTemperature || isYellowCo2) return opacity * 0.62;
+  if (isGreenTemperature || isIdealHumidity) return opacity * 1.18;
   return opacity;
 }
 
@@ -530,15 +529,15 @@ const heatmapZones: HeatmapZone[] = [
   { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "33.1,21.2 39.9,21.2 39.9,29.6 33.1,29.6" },
   { id: "s5_em300_05", label: "S5", sensors: ["EM300-05"], points: "44.0,44.5 53.9,44.5 53.9,64.5 44.0,64.5" },
   { id: "s6_em300_06", label: "S6", sensors: ["EM300-06"], points: "44.0,65.5 66.8,65.5 66.8,84.6 44.0,84.6" },
-  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.2,44.5 75.6,44.5 75.6,64.6 66.8,64.6 66.8,64.2 55.2,64.2" },
-  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.6,44.5 96.0,44.5 96.0,64.6 75.6,64.6" },
-  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "66.8,68.5 94.2,68.5 94.2,83.6 66.8,83.6" },
-  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "43.2,13.3 59.3,13.3 59.3,42.3 43.2,42.3" },
+  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.2,44.5 75.6,44.5 75.6,66.0 66.8,66.0 66.8,65.5 55.2,65.5" },
+  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.6,44.5 96.0,44.5 96.0,67.2 75.6,67.2" },
+  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "66.8,66.0 94.2,66.0 94.2,83.6 66.8,83.6" },
+  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "41.2,13.3 59.3,13.3 59.3,42.3 41.2,42.3" },
   { id: "s11_am103l_11", label: "S11", sensors: ["AM103L-11"], points: "59.3,13.3 77.4,13.3 77.4,42.3 59.3,42.3" },
   { id: "s12_am103l_12", label: "S12", sensors: ["AM103L-12"], points: "77.4,13.3 96.0,13.3 96.0,42.3 77.4,42.3" },
-  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.0,31.4 40.8,31.4 40.8,48.7 7.0,48.7" },
-  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.0,48.7 40.8,48.7 40.8,65.5 7.0,65.5" },
-  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.5 40.8,65.5 40.8,85.2 7.0,85.2" },
+  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.0,31.4 42.3,31.4 42.3,48.7 7.0,48.7" },
+  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.0,48.7 42.3,48.7 42.3,65.5 7.0,65.5" },
+  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.5 42.3,65.5 42.3,85.2 7.0,85.2" },
 ];
 
 function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
@@ -606,16 +605,8 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
-      style={{
-        WebkitMaskImage: `url(${floorHeatmapMask})`,
-        maskImage: `url(${floorHeatmapMask})`,
-        WebkitMaskSize: "100% 100%",
-        maskSize: "100% 100%",
-        WebkitMaskRepeat: "no-repeat",
-        maskRepeat: "no-repeat",
-      }}
     >
-      <g style={{ mixBlendMode: "normal" }}>
+      <g style={{ mixBlendMode: "screen" }}>
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
@@ -623,17 +614,17 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
             <polygon
               key={zone.id}
               points={zone.points}
-              fill={heatColor(layer, value, 0.50)}
+              fill={heatColor(layer, value, 0.38)}
               stroke="none"
             />
           );
         })}
       </g>
-      <g style={{ mixBlendMode: "multiply" }} opacity="0.16">
+      <g style={{ mixBlendMode: "overlay" }} opacity="0.28">
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
-          return <polygon key={`${zone.id}-soft`} points={zone.points} fill={heatColor(layer, value, 0.22)} stroke="none" />;
+          return <polygon key={`${zone.id}-soft`} points={zone.points} fill={heatColor(layer, value, 0.18)} stroke="none" />;
         })}
       </g>
     </svg>
