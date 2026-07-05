@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Fragment, useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   LayoutDashboard,
   Radio,
@@ -298,26 +298,23 @@ const sensorRegistry: Sensor[] = [
 ];
 
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  // Posições visuais dos pins dos sensores na planta.
-  // Mantém as áreas atendidas/heatmap inalteradas; ajusta apenas a bolinha do sensor.
-  // Regra aplicada: salas fechadas centralizadas; áreas abertas centralizadas na marcação rosa.
-  // Alinhamentos visuais: S10/S11/S12 na horizontal, S7/S8 na horizontal, S13/S14/S15 na vertical.
-  "EM300-01": { x: 13.2, y: 15.2 }, // S1
-  "EM300-02": { x: 13.0, y: 26.0 }, // S2
-  "EM300-03": { x: 27.3, y: 22.0 }, // S3 - validado na marca vermelha
-  "EM300-04": { x: 36.6, y: 25.1 }, // S4 - validado na marca verde
-  "EM300-05": { x: 48.0, y: 55.7 }, // S5 - refinado para o centro da sala
-  "EM300-06": { x: 54.0, y: 76.0 }, // S6 - refinado para a marca vermelha
-
-  "AM103L-07": { x: 65.5, y: 54.2 }, // S7 - elevado para a marca laranja
-  "AM103L-08": { x: 86.0, y: 54.2 }, // S8 - elevado junto com S7 para manter alinhamento
-  "AM103L-09": { x: 82.0, y: 76.5 }, // S9
-  "AM103L-10": { x: 51.0, y: 29.5 }, // S10
-  "AM103L-11": { x: 68.5, y: 29.5 }, // S11
-  "AM103L-12": { x: 87.0, y: 29.5 }, // S12
-  "AM103L-13": { x: 22.5, y: 40.5 }, // S13
-  "AM103L-14": { x: 22.5, y: 60.0 }, // S14
-  "AM103L-15": { x: 22.5, y: 80.5 }, // S15
+  // Posições provisórias recalibradas para a planta Fleury final, horizontal e sem perspectiva.
+  // Estes pontos devem ser ajustados quando o cliente validar a posição física real dos sensores.
+  "EM300-01": { x: 14, y: 70 },
+  "EM300-02": { x: 32, y: 61 },
+  "EM300-03": { x: 43, y: 62 },
+  "EM300-04": { x: 55, y: 62 },
+  "EM300-05": { x: 64, y: 64 },
+  "EM300-06": { x: 88, y: 61 },
+  "AM103L-07": { x: 12, y: 34 },
+  "AM103L-08": { x: 30, y: 31 },
+  "AM103L-09": { x: 47, y: 34 },
+  "AM103L-10": { x: 66, y: 30 },
+  "AM103L-11": { x: 85, y: 36 },
+  "AM103L-12": { x: 20, y: 51 },
+  "AM103L-13": { x: 38, y: 50 },
+  "AM103L-14": { x: 56, y: 48 },
+  "AM103L-15": { x: 76, y: 48 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -513,129 +510,73 @@ function heatColor(layer: Layer, value: number, opacity = 0.58) {
   return mixHex(stops[stops.length - 1].color, stops[stops.length - 1].color, 0, visualOpacity);
 }
 
-type HeatmapArea = {
+type HeatmapZone = {
   id: string;
   label: string;
-  sensorId: string;
-  polygon: string;
-  labelX: number;
-  labelY: number;
+  sensors: string[];
+  // Polígono em coordenadas percentuais da imagem floor-plan-fleury-top.png.
+  // Importante: sem stroke/linha visível. O usuário vê apenas a massa térmica suave da área.
+  points: string;
 };
 
-const heatmapAreas: HeatmapArea[] = [
-  // Áreas de influência desenhadas a partir da imagem 2.
-  // O polígono define a área atendida; o ponto do sensor fica em sensorMapPositions.
-  { id: "s1", label: "S1", sensorId: "EM300-01", polygon: "4,8 18,8 18,20 4,20", labelX: 10.5, labelY: 15 },
-  { id: "s2", label: "S2", sensorId: "EM300-02", polygon: "4,23 18,23 18,29 4,29", labelX: 11, labelY: 26 },
-  { id: "s3", label: "S3", sensorId: "EM300-03", polygon: "20,8 39,8 39,19 31,19 30,29 20,29", labelX: 27, labelY: 17 },
-  { id: "s4", label: "S4", sensorId: "EM300-04", polygon: "32,22 39,22 39,29 32,29", labelX: 35.5, labelY: 25.5 },
-  { id: "s10", label: "S10", sensorId: "AM103L-10", polygon: "43,15 59,15 59,44 43,44", labelX: 50, labelY: 31 },
-  { id: "s11", label: "S11", sensorId: "AM103L-11", polygon: "59,15 78,15 78,44 59,44", labelX: 68, labelY: 31 },
-  { id: "s12", label: "S12", sensorId: "AM103L-12", polygon: "78,15 96,15 96,44 78,44", labelX: 86.5, labelY: 31 },
-  { id: "s13", label: "S13", sensorId: "AM103L-13", polygon: "4,32 41,32 41,52 4,52", labelX: 23, labelY: 43 },
-  { id: "s14", label: "S14", sensorId: "AM103L-14", polygon: "4,52 41,52 41,71 4,71", labelX: 22.5, labelY: 62 },
-  { id: "s15", label: "S15", sensorId: "AM103L-15", polygon: "4,71 41,71 41,93 4,93", labelX: 23, labelY: 81 },
-  { id: "s5", label: "S5", sensorId: "EM300-05", polygon: "43,47 53,47 53,69 43,69", labelX: 48.5, labelY: 58 },
-  { id: "s6", label: "S6", sensorId: "EM300-06", polygon: "43,71 66,71 66,91 43,91", labelX: 51.5, labelY: 81 },
-  { id: "s7", label: "S7", sensorId: "AM103L-07", polygon: "55,47 76,47 76,74 70,74 70,69 55,69", labelX: 65, labelY: 57 },
-  { id: "s8", label: "S8", sensorId: "AM103L-08", polygon: "76,47 96,47 96,72 76,72", labelX: 84, labelY: 59 },
-  { id: "s9", label: "S9", sensorId: "AM103L-09", polygon: "70,73 94,73 94,89 70,89", labelX: 82.5, labelY: 81 },
+const heatmapZones: HeatmapZone[] = [
+  // Mapa validado pela referência manual do cliente: S1..S15.
+  // Cada zona representa a área atendida pelo sensor, não um raio de proximidade.
+  { id: "s1_em300_01", label: "S1", sensors: ["EM300-01"], points: "7.1,13.8 20.4,13.8 20.4,21.6 7.1,21.6" },
+  { id: "s2_em300_02", label: "S2", sensors: ["EM300-02"], points: "7.1,23.6 20.1,23.6 20.1,29.0 7.1,29.0" },
+  { id: "s3_em300_03", label: "S3", sensors: ["EM300-03"], points: "22.2,13.6 39.8,13.6 39.8,18.5 31.9,18.5 31.5,28.9 22.2,28.9" },
+  { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "33.2,21.0 39.8,21.0 39.8,28.9 33.2,28.9" },
+  { id: "s5_em300_05", label: "S5", sensors: ["EM300-05"], points: "44.0,44.4 53.6,44.4 53.6,63.7 44.0,63.7" },
+  { id: "s6_em300_06", label: "S6", sensors: ["EM300-06"], points: "44.0,65.3 66.6,65.3 66.6,83.8 44.0,83.8" },
+  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.3,44.5 75.5,44.5 75.5,63.3 66.6,63.3 66.6,65.3 55.3,65.3" },
+  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.5,44.5 96.0,44.5 96.0,67.0 75.5,67.0" },
+  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "69.7,67.0 94.1,67.0 94.1,82.2 69.7,82.2" },
+  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "44.1,13.4 59.3,13.4 59.3,41.7 44.1,41.7" },
+  { id: "s11_am103l_11", label: "S11", sensors: ["AM103L-11"], points: "59.3,13.4 77.4,13.4 77.4,41.7 59.3,41.7" },
+  { id: "s12_am103l_12", label: "S12", sensors: ["AM103L-12"], points: "77.4,13.4 95.8,13.4 95.8,41.7 77.4,41.7" },
+  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.1,31.4 42.3,31.4 42.3,48.5 7.1,48.5" },
+  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.1,48.5 42.3,48.5 42.3,65.0 7.1,65.0" },
+  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.0 42.1,65.0 42.1,85.2 7.0,85.2" },
 ];
 
-function sensorForArea(area: HeatmapArea, sensors: Sensor[]) {
-  return sensors.find((sensor) => sensor.sensor_id === area.sensorId) || sensorRegistry.find((sensor) => sensor.sensor_id === area.sensorId) || null;
+function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
+  const ids = new Set(zone.sensors);
+  return sensors
+    .filter((sensor) => ids.has(sensor.sensor_id))
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => valueForLayer(sensor, layer))
+    .filter((value): value is number => typeof value === "number");
 }
 
-function valueForArea(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const direct = sensorForArea(area, sensors);
-  const directValue = direct && !(layer === "co2" && isEm300Sensor(direct)) ? valueForLayer(direct, layer) : null;
-  if (typeof directValue === "number") return directValue;
+function average(values: number[]) {
+  return values.reduce((acc, value) => acc + value, 0) / values.length;
+}
 
-  // Em CO₂, EM300 não informa ppm. Para não deixar buracos no mapa, usa o AM103L válido mais próximo.
+function zoneCentroid(zone: HeatmapZone) {
+  const coords = zone.points.split(/\s+/).map((point) => point.split(",").map(Number)).filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y));
+  if (!coords.length) return { x: 50, y: 50 };
+  return {
+    x: coords.reduce((acc, [x]) => acc + x, 0) / coords.length,
+    y: coords.reduce((acc, [, y]) => acc + y, 0) / coords.length,
+  };
+}
+
+function nearestZoneValue(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
+  const zoneValues = valuesForZone(zone, sensors, layer);
+  if (zoneValues.length) return average(zoneValues);
+
+  // Fallback visual: se uma zona ainda não tiver sensor válido na camada, usa o sensor válido mais próximo.
   const valid = sensors
     .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
     .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer), pos: mapPosition(sensor) }))
     .filter((item): item is { sensor: Sensor; value: number; pos: { x: number; y: number } } => typeof item.value === "number");
 
   if (!valid.length) return null;
+  const center = zoneCentroid(zone);
   const nearest = valid
-    .map((item) => ({ ...item, distance: Math.hypot(item.pos.x - area.labelX, item.pos.y - area.labelY) }))
+    .map((item) => ({ ...item, distance: Math.hypot(item.pos.x - center.x, item.pos.y - center.y) }))
     .sort((a, b) => a.distance - b.distance)[0];
   return nearest?.value ?? null;
-}
-
-function heatmapAreaFill(area: HeatmapArea, sensors: Sensor[], layer: Layer, opacity = 0.66) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, opacity) : "rgba(15,23,42,.18)";
-}
-
-function heatmapAreaStroke(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, 0.92) : "rgba(148,163,184,.26)";
-}
-
-function polygonPoints(area: HeatmapArea) {
-  return area.polygon
-    .trim()
-    .split(/\s+/)
-    .map((point) => {
-      const [x, y] = point.split(",").map(Number);
-      return { x, y };
-    })
-    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
-}
-
-function polygonBounds(area: HeatmapArea) {
-  const points = polygonPoints(area);
-  const xs = points.map((point) => point.x);
-  const ys = points.map((point) => point.y);
-  return {
-    minX: Math.min(...xs),
-    maxX: Math.max(...xs),
-    minY: Math.min(...ys),
-    maxY: Math.max(...ys),
-  };
-}
-
-function areaSensorPosition(area: HeatmapArea, sensors: Sensor[]) {
-  const sensor = sensorForArea(area, sensors);
-  return sensor ? mapPosition(sensor) : { x: area.labelX, y: area.labelY };
-}
-
-function areaGradientRadius(area: HeatmapArea, sensors: Sensor[]) {
-  const pos = areaSensorPosition(area, sensors);
-  const bounds = polygonBounds(area);
-  const corners = [
-    { x: bounds.minX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.minY },
-    { x: bounds.maxX, y: bounds.maxY },
-    { x: bounds.minX, y: bounds.maxY },
-  ];
-  return Math.max(7, ...corners.map((corner) => Math.hypot(corner.x - pos.x, corner.y - pos.y))) * 1.08;
-}
-
-function heatmapAreaBaseFill(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, 0.20) : "rgba(15,23,42,.10)";
-}
-
-function heatmapAreaCoreColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, 0.74) : "rgba(14,165,233,.32)";
-}
-
-function heatmapAreaMidColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, 0.38) : "rgba(14,165,233,.18)";
-}
-
-function heatmapAreaFeatherColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
-  const value = valueForArea(area, sensors, layer);
-  return typeof value === "number" ? heatColor(layer, value, 0.10) : "rgba(14,165,233,.06)";
-}
-
-function average(values: number[]) {
-  return values.reduce((acc, value) => acc + value, 0) / values.length;
 }
 
 function heatmapAmbient(sensors: Sensor[], layer: Layer) {
@@ -645,26 +586,48 @@ function heatmapAmbient(sensors: Sensor[], layer: Layer) {
     .filter((value): value is number => typeof value === "number");
   if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.14), transparent 62%)";
   const avg = average(values);
-  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.16)} 0%, ${heatColor(layer, avg, 0.08)} 52%, transparent 86%)`;
+  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.18)} 0%, ${heatColor(layer, avg, 0.10)} 52%, transparent 86%)`;
 }
 
 function heatmapBackground(sensors: Sensor[], layer: Layer) {
-  const withValues = sensors
-    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
-    .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer) }))
-    .filter((item): item is { sensor: Sensor; value: number } => typeof item.value === "number");
+  // Mantido somente para o brilho ambiente global. O heatmap principal agora é SVG por zonas fixas.
+  return heatmapAmbient(sensors, layer);
+}
 
-  if (!withValues.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.20), transparent 58%)";
+function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Layer }) {
+  const hasAnyValue = sensors.some((sensor) => !(layer === "co2" && isEm300Sensor(sensor)) && typeof valueForLayer(sensor, layer) === "number");
+  if (!hasAnyValue) return null;
 
-  const localCores = withValues.map(({ sensor, value }) => {
-    const { x, y } = mapPosition(sensor);
-    const core = heatColor(layer, value, 0.72);
-    const halo = heatColor(layer, value, 0.34);
-    const fade = heatColor(layer, value, 0.12);
-    return `radial-gradient(circle at ${x}% ${y}%, ${core} 0%, ${core} 5%, ${halo} 16%, ${fade} 28%, transparent 42%)`;
-  });
-
-  return [...localCores, heatmapAmbient(sensors, layer)].join(",");
+  return (
+    <svg
+      className="absolute inset-0 h-full w-full pointer-events-none transition-opacity duration-700"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <g style={{ mixBlendMode: "screen" }}>
+        {heatmapZones.map((zone) => {
+          const value = nearestZoneValue(zone, sensors, layer);
+          if (value === null) return null;
+          return (
+            <polygon
+              key={zone.id}
+              points={zone.points}
+              fill={heatColor(layer, value, 0.38)}
+              stroke="none"
+            />
+          );
+        })}
+      </g>
+      <g style={{ mixBlendMode: "overlay" }} opacity="0.28">
+        {heatmapZones.map((zone) => {
+          const value = nearestZoneValue(zone, sensors, layer);
+          if (value === null) return null;
+          return <polygon key={`${zone.id}-soft`} points={zone.points} fill={heatColor(layer, value, 0.18)} stroke="none" />;
+        })}
+      </g>
+    </svg>
+  );
 }
 
 function layerValueText(sensor: Sensor, layer: Layer) {
@@ -1209,15 +1172,7 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   const activeSensors = sensors.length ? sensors : sensorRegistry;
   const visibleSensors = layer === "co2" ? activeSensors.filter((sensor) => !isEm300Sensor(sensor)) : activeSensors;
-  const heatmapScopeId = useId().replace(/:/g, "");
-  const floorPlanMask = {
-    WebkitMaskImage: `url(${floorPlan})`,
-    maskImage: `url(${floorPlan})`,
-    WebkitMaskSize: "100% 100%",
-    maskSize: "100% 100%",
-    WebkitMaskRepeat: "no-repeat",
-    maskRepeat: "no-repeat",
-  } as any;
+  const heatBackground = heatmapBackground(activeSensors, layer);
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
       <div className="absolute right-4 top-3 z-30 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
@@ -1227,60 +1182,9 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
           <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1536} height={1024} />
-              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 mix-blend-screen opacity-90 premium-heatmap-breathe" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <defs>
-                  <filter id={`${heatmapScopeId}-premiumAreaSoftness`} x="-8%" y="-8%" width="116%" height="116%">
-                    <feGaussianBlur stdDeviation="0.42" />
-                  </filter>
-                  <filter id={`${heatmapScopeId}-premiumAreaGlow`} x="-16%" y="-16%" width="132%" height="132%">
-                    <feGaussianBlur stdDeviation="1.05" />
-                  </filter>
-                  {heatmapAreas.map((area) => {
-                    const pos = areaSensorPosition(area, activeSensors);
-                    const radius = areaGradientRadius(area, activeSensors);
-                    return (
-                      <Fragment key={`${area.id}-defs`}>
-                        <clipPath id={`${heatmapScopeId}-clip-${area.id}`}>
-                          <polygon points={area.polygon} />
-                        </clipPath>
-                        <radialGradient id={`${heatmapScopeId}-gradient-${area.id}-${layer}`} gradientUnits="userSpaceOnUse" cx={pos.x} cy={pos.y} r={radius}>
-                          <stop offset="0%" stopColor={heatmapAreaCoreColor(area, activeSensors, layer)} />
-                          <stop offset="30%" stopColor={heatmapAreaMidColor(area, activeSensors, layer)} />
-                          <stop offset="68%" stopColor={heatmapAreaFeatherColor(area, activeSensors, layer)} />
-                          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-                        </radialGradient>
-                      </Fragment>
-                    );
-                  })}
-                </defs>
-
-                {heatmapAreas.map((area) => (
-                  <g key={`${area.id}-premium`} clipPath={`url(#${heatmapScopeId}-clip-${area.id})`}>
-                    <polygon points={area.polygon} fill={heatmapAreaBaseFill(area, activeSensors, layer)} filter={`url(#${heatmapScopeId}-premiumAreaSoftness)`} />
-                    <rect x="0" y="0" width="100" height="100" fill={`url(#${heatmapScopeId}-gradient-${area.id}-${layer})`} filter={`url(#${heatmapScopeId}-premiumAreaGlow)`} />
-                    <polygon points={area.polygon} fill="rgba(255,255,255,.045)" />
-                  </g>
-                ))}
-              </svg>
-              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 mix-blend-overlay opacity-45" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                <defs>
-                  <filter id={`${heatmapScopeId}-premiumInnerEdge`}>
-                    <feGaussianBlur stdDeviation="0.18" />
-                  </filter>
-                </defs>
-                {heatmapAreas.map((area) => (
-                  <polygon
-                    key={`${area.id}-edge`}
-                    points={area.polygon}
-                    fill="transparent"
-                    stroke={heatmapAreaStroke(area, activeSensors, layer)}
-                    strokeWidth="0.11"
-                    filter={`url(#${heatmapScopeId}-premiumInnerEdge)`}
-                  />
-                ))}
-              </svg>
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.10]" style={{ ...floorPlanMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
+              <div className="absolute inset-0 transition-opacity duration-700 opacity-45 mix-blend-screen" style={{ background: heatBackground, filter: "blur(16px) saturate(1.65)" }} />
+              <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.026),transparent_55%)]" />
             </div>
             <div className="absolute inset-0 z-20 pointer-events-none" >
               {visibleSensors.map((s) => {
