@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   LayoutDashboard,
   Radio,
@@ -572,6 +572,66 @@ function heatmapAreaFill(area: HeatmapArea, sensors: Sensor[], layer: Layer, opa
 function heatmapAreaStroke(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
   const value = valueForArea(area, sensors, layer);
   return typeof value === "number" ? heatColor(layer, value, 0.92) : "rgba(148,163,184,.26)";
+}
+
+function polygonPoints(area: HeatmapArea) {
+  return area.polygon
+    .trim()
+    .split(/\s+/)
+    .map((point) => {
+      const [x, y] = point.split(",").map(Number);
+      return { x, y };
+    })
+    .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
+}
+
+function polygonBounds(area: HeatmapArea) {
+  const points = polygonPoints(area);
+  const xs = points.map((point) => point.x);
+  const ys = points.map((point) => point.y);
+  return {
+    minX: Math.min(...xs),
+    maxX: Math.max(...xs),
+    minY: Math.min(...ys),
+    maxY: Math.max(...ys),
+  };
+}
+
+function areaSensorPosition(area: HeatmapArea, sensors: Sensor[]) {
+  const sensor = sensorForArea(area, sensors);
+  return sensor ? mapPosition(sensor) : { x: area.labelX, y: area.labelY };
+}
+
+function areaGradientRadius(area: HeatmapArea, sensors: Sensor[]) {
+  const pos = areaSensorPosition(area, sensors);
+  const bounds = polygonBounds(area);
+  const corners = [
+    { x: bounds.minX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.minY },
+    { x: bounds.maxX, y: bounds.maxY },
+    { x: bounds.minX, y: bounds.maxY },
+  ];
+  return Math.max(7, ...corners.map((corner) => Math.hypot(corner.x - pos.x, corner.y - pos.y))) * 1.08;
+}
+
+function heatmapAreaBaseFill(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
+  const value = valueForArea(area, sensors, layer);
+  return typeof value === "number" ? heatColor(layer, value, 0.20) : "rgba(15,23,42,.10)";
+}
+
+function heatmapAreaCoreColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
+  const value = valueForArea(area, sensors, layer);
+  return typeof value === "number" ? heatColor(layer, value, 0.74) : "rgba(14,165,233,.32)";
+}
+
+function heatmapAreaMidColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
+  const value = valueForArea(area, sensors, layer);
+  return typeof value === "number" ? heatColor(layer, value, 0.38) : "rgba(14,165,233,.18)";
+}
+
+function heatmapAreaFeatherColor(area: HeatmapArea, sensors: Sensor[], layer: Layer) {
+  const value = valueForArea(area, sensors, layer);
+  return typeof value === "number" ? heatColor(layer, value, 0.10) : "rgba(14,165,233,.06)";
 }
 
 function average(values: number[]) {
@@ -1149,8 +1209,8 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   const activeSensors = sensors.length ? sensors : sensorRegistry;
   const visibleSensors = layer === "co2" ? activeSensors.filter((sensor) => !isEm300Sensor(sensor)) : activeSensors;
-  const heatBackground = heatmapBackground(activeSensors, layer);
-  const heatmapMask = {
+  const heatmapScopeId = useId().replace(/:/g, "");
+  const floorPlanMask = {
     WebkitMaskImage: `url(${floorPlan})`,
     maskImage: `url(${floorPlan})`,
     WebkitMaskSize: "100% 100%",
@@ -1167,31 +1227,59 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
           <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1536} height={1024} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen opacity-95" style={{ ...heatmapMask, background: heatBackground, filter: "blur(19px) saturate(2.35) contrast(1.34)" }} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-color-dodge opacity-50" style={{ ...heatmapMask, background: heatBackground, filter: "blur(41px) saturate(2.15)" }} />
-              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 mix-blend-screen opacity-80" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 mix-blend-screen opacity-90 premium-heatmap-breathe" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
                 <defs>
-                  <filter id="areaHeatBlur">
-                    <feGaussianBlur stdDeviation="0.65" />
+                  <filter id={`${heatmapScopeId}-premiumAreaSoftness`} x="-8%" y="-8%" width="116%" height="116%">
+                    <feGaussianBlur stdDeviation="0.42" />
+                  </filter>
+                  <filter id={`${heatmapScopeId}-premiumAreaGlow`} x="-16%" y="-16%" width="132%" height="132%">
+                    <feGaussianBlur stdDeviation="1.05" />
+                  </filter>
+                  {heatmapAreas.map((area) => {
+                    const pos = areaSensorPosition(area, activeSensors);
+                    const radius = areaGradientRadius(area, activeSensors);
+                    return (
+                      <Fragment key={`${area.id}-defs`}>
+                        <clipPath id={`${heatmapScopeId}-clip-${area.id}`}>
+                          <polygon points={area.polygon} />
+                        </clipPath>
+                        <radialGradient id={`${heatmapScopeId}-gradient-${area.id}-${layer}`} gradientUnits="userSpaceOnUse" cx={pos.x} cy={pos.y} r={radius}>
+                          <stop offset="0%" stopColor={heatmapAreaCoreColor(area, activeSensors, layer)} />
+                          <stop offset="30%" stopColor={heatmapAreaMidColor(area, activeSensors, layer)} />
+                          <stop offset="68%" stopColor={heatmapAreaFeatherColor(area, activeSensors, layer)} />
+                          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+                        </radialGradient>
+                      </Fragment>
+                    );
+                  })}
+                </defs>
+
+                {heatmapAreas.map((area) => (
+                  <g key={`${area.id}-premium`} clipPath={`url(#${heatmapScopeId}-clip-${area.id})`}>
+                    <polygon points={area.polygon} fill={heatmapAreaBaseFill(area, activeSensors, layer)} filter={`url(#${heatmapScopeId}-premiumAreaSoftness)`} />
+                    <rect x="0" y="0" width="100" height="100" fill={`url(#${heatmapScopeId}-gradient-${area.id}-${layer})`} filter={`url(#${heatmapScopeId}-premiumAreaGlow)`} />
+                    <polygon points={area.polygon} fill="rgba(255,255,255,.045)" />
+                  </g>
+                ))}
+              </svg>
+              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 mix-blend-overlay opacity-45" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                <defs>
+                  <filter id={`${heatmapScopeId}-premiumInnerEdge`}>
+                    <feGaussianBlur stdDeviation="0.18" />
                   </filter>
                 </defs>
                 {heatmapAreas.map((area) => (
                   <polygon
-                    key={area.id}
+                    key={`${area.id}-edge`}
                     points={area.polygon}
-                    fill={heatmapAreaFill(area, activeSensors, layer)}
+                    fill="transparent"
                     stroke={heatmapAreaStroke(area, activeSensors, layer)}
-                    strokeWidth="0.16"
-                    filter="url(#areaHeatBlur)"
+                    strokeWidth="0.11"
+                    filter={`url(#${heatmapScopeId}-premiumInnerEdge)`}
                   />
                 ))}
               </svg>
-              <svg className="absolute inset-0 h-full w-full transition-opacity duration-700 opacity-25" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-                {heatmapAreas.map((area) => (
-                  <polygon key={`${area.id}-edge`} points={area.polygon} fill="transparent" stroke="rgba(255,255,255,.34)" strokeWidth="0.10" />
-                ))}
-              </svg>
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.14]" style={{ ...heatmapMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
+              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-overlay opacity-[.10]" style={{ ...floorPlanMask, background: "repeating-radial-gradient(circle at 50% 50%, rgba(255,255,255,.16) 0 1px, transparent 1px 22px)", filter: "blur(.2px)" }} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_55%)]" />
             </div>
             <div className="absolute inset-0 z-20 pointer-events-none" >

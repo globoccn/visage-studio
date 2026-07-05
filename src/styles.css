@@ -157,3 +157,19 @@
     }
   }
 }
+
+/* Heatmap premium: respiração sutil e profissional, aplicada igualmente a temperatura, umidade e CO₂. */
+@keyframes premiumHeatmapBreathe {
+  0%, 100% {
+    opacity: 0.88;
+    filter: saturate(1.14) contrast(1.02);
+  }
+  50% {
+    opacity: 0.94;
+    filter: saturate(1.24) contrast(1.06);
+  }
+}
+
+.premium-heatmap-breathe {
+  animation: premiumHeatmapBreathe 5.8s ease-in-out infinite;
+}
