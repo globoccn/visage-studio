@@ -450,49 +450,49 @@ function mixHex(a: string, b: string, t: number, opacity = 1) {
 }
 
 function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
+  // Heatmap V2 visual: paleta mais viva e saturada, mantendo os mesmos limites operacionais.
   if (layer === "temperature") {
     return [
-      { at: 20.9, color: "#0f172a" },
-      { at: 21, color: "#1d4ed8" },
-      { at: 22.9, color: "#2563eb" },
-      { at: 23, color: "#22c55e" },
-      { at: 24, color: "#16a34a" },
-      { at: 24.1, color: "#facc15" },
-      { at: 24.9, color: "#f59e0b" },
-      { at: 25, color: "#ef4444" },
-      { at: 26, color: "#b91c1c" },
+      { at: 20.9, color: "#08206f" },
+      { at: 21, color: "#0b4eea" },
+      { at: 22.9, color: "#1087ff" },
+      { at: 23, color: "#16c76a" },
+      { at: 24, color: "#51d12f" },
+      { at: 24.1, color: "#ffe126" },
+      { at: 24.9, color: "#ff9f1c" },
+      { at: 25, color: "#ff4d2e" },
+      { at: 26, color: "#c81e1e" },
     ];
   }
   if (layer === "humidity") {
     return [
-      { at: 20, color: "#b91c1c" },
-      { at: 30, color: "#ef4444" },
-      { at: 40, color: "#f97316" },
-      { at: 50, color: "#22c55e" },
-      { at: 60, color: "#16a34a" },
-      { at: 70, color: "#22d3ee" },
-      { at: 80, color: "#2563eb" },
+      { at: 20, color: "#c81e1e" },
+      { at: 30, color: "#ff4d2e" },
+      { at: 40, color: "#ff9f1c" },
+      { at: 50, color: "#24cc63" },
+      { at: 60, color: "#55d130" },
+      { at: 70, color: "#00c7e6" },
+      { at: 80, color: "#0b58ff" },
     ];
   }
   return [
-    { at: 400, color: "#22c55e" },
-    { at: 700, color: "#22c55e" },
-    { at: 900, color: "#a3e635" },
-    { at: 1000, color: "#facc15" },
-    { at: 1200, color: "#f97316" },
-    { at: 1500, color: "#ef4444" },
+    { at: 400, color: "#24cc63" },
+    { at: 700, color: "#55d130" },
+    { at: 900, color: "#b7e928" },
+    { at: 1000, color: "#ffe126" },
+    { at: 1200, color: "#ff9f1c" },
+    { at: 1500, color: "#ff4d2e" },
   ];
 }
 
 function normalizedHeatOpacity(layer: Layer, value: number, opacity: number) {
-  // Normalização visual por cor: amarelo tem muita luminância e tende a "lavar" o mapa.
-  // Ajustamos a opacidade por faixa para que azul, verde, amarelo e vermelho tenham potência parecida.
+  // Heatmap V2 visual: mais presença sem virar uma película opaca sobre a planta.
   const isYellowTemperature = layer === "temperature" && value >= 24.1 && value < 25;
   const isYellowCo2 = layer === "co2" && value >= 900 && value <= 1000;
   const isGreenTemperature = layer === "temperature" && value >= 23 && value <= 24;
   const isIdealHumidity = layer === "humidity" && value >= 40 && value <= 60;
-  if (isYellowTemperature || isYellowCo2) return opacity * 0.62;
-  if (isGreenTemperature || isIdealHumidity) return opacity * 1.18;
+  if (isYellowTemperature || isYellowCo2) return opacity * 0.82;
+  if (isGreenTemperature || isIdealHumidity) return opacity * 1.08;
   return opacity;
 }
 
@@ -585,9 +585,9 @@ function heatmapAmbient(sensors: Sensor[], layer: Layer) {
     .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
     .map((sensor) => valueForLayer(sensor, layer))
     .filter((value): value is number => typeof value === "number");
-  if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.14), transparent 62%)";
+  if (!values.length) return "radial-gradient(ellipse at 50% 50%, rgba(14,165,233,.16), transparent 62%)";
   const avg = average(values);
-  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.18)} 0%, ${heatColor(layer, avg, 0.10)} 52%, transparent 86%)`;
+  return `radial-gradient(ellipse at 50% 50%, ${heatColor(layer, avg, 0.22)} 0%, ${heatColor(layer, avg, 0.14)} 54%, transparent 88%)`;
 }
 
 function heatmapBackground(sensors: Sensor[], layer: Layer) {
@@ -601,30 +601,59 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
 
   return (
     <svg
-      className="absolute inset-0 h-full w-full pointer-events-none transition-opacity duration-700"
+      className="absolute inset-0 h-full w-full pointer-events-none transition-opacity duration-500"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
+      style={{ filter: "saturate(1.35) contrast(1.08)" }}
     >
-      <g style={{ mixBlendMode: "screen" }}>
+      <defs>
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
+          const center = zoneCentroid(zone);
           return (
-            <polygon
-              key={zone.id}
-              points={zone.points}
-              fill={heatColor(layer, value, 0.38)}
-              stroke="none"
-            />
+            <radialGradient
+              key={`${zone.id}-gradient`}
+              id={`heat-${zone.id}`}
+              cx={`${center.x}%`}
+              cy={`${center.y}%`}
+              r="68%"
+              fx={`${center.x}%`}
+              fy={`${center.y}%`}
+            >
+              <stop offset="0%" stopColor={heatColor(layer, value, 0.72)} />
+              <stop offset="58%" stopColor={heatColor(layer, value, 0.56)} />
+              <stop offset="100%" stopColor={heatColor(layer, value, 0.42)} />
+            </radialGradient>
           );
         })}
-      </g>
-      <g style={{ mixBlendMode: "overlay" }} opacity="0.28">
+      </defs>
+
+      {/* Base cromática viva, com mistura na textura do piso. */}
+      <g style={{ mixBlendMode: "multiply" }} opacity="0.72">
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
-          return <polygon key={`${zone.id}-soft`} points={zone.points} fill={heatColor(layer, value, 0.18)} stroke="none" />;
+          return <polygon key={`${zone.id}-base`} points={zone.points} fill={heatColor(layer, value, 0.50)} stroke="none" />;
+        })}
+      </g>
+
+      {/* Gradiente interno: centro mais presente e bordas mais naturais, sem alterar polígonos. */}
+      <g style={{ mixBlendMode: "soft-light" }} opacity="0.92">
+        {heatmapZones.map((zone) => {
+          const value = nearestZoneValue(zone, sensors, layer);
+          if (value === null) return null;
+          return <polygon key={`${zone.id}-gradient-fill`} points={zone.points} fill={`url(#heat-${zone.id})`} stroke="none" />;
+        })}
+      </g>
+
+      {/* Luz difusa mínima para tirar o aspecto chapado de bloco pintado. */}
+      <g style={{ mixBlendMode: "screen" }} opacity="0.24">
+        {heatmapZones.map((zone) => {
+          const value = nearestZoneValue(zone, sensors, layer);
+          if (value === null) return null;
+          return <polygon key={`${zone.id}-light`} points={zone.points} fill={`url(#heat-${zone.id})`} stroke="none" />;
         })}
       </g>
     </svg>
@@ -1183,7 +1212,7 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
           <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" width={1536} height={1024} />
-              <div className="absolute inset-0 transition-opacity duration-700 opacity-45 mix-blend-screen" style={{ background: heatBackground, filter: "blur(16px) saturate(1.65)" }} />
+              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen" style={{ background: heatBackground, filter: "blur(18px) saturate(1.95) contrast(1.08)", opacity: 0.36 }} />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.026),transparent_55%)]" />
             </div>
