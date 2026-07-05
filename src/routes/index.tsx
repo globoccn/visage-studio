@@ -606,9 +606,17 @@ function heatmapBackground(sensors: Sensor[], layer: Layer) {
   return [...spots, heatmapAmbient(sensors, layer)].join(",");
 }
 
+function svgSafeId(value: string) {
+  return value.replace(/[^a-zA-Z0-9_-]/g, "_");
+}
+
 function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Layer }) {
-  const hasAnyValue = sensors.some((sensor) => !(layer === "co2" && isEm300Sensor(sensor)) && typeof valueForLayer(sensor, layer) === "number");
-  if (!hasAnyValue) return null;
+  const thermalSensors = sensors
+    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
+    .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer), pos: mapPosition(sensor) }))
+    .filter((item): item is { sensor: Sensor; value: number; pos: { x: number; y: number } } => typeof item.value === "number");
+
+  if (!thermalSensors.length) return null;
 
   return (
     <svg
@@ -616,15 +624,31 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
-      style={{ filter: "saturate(1.58) contrast(1.12)" }}
+      style={{ filter: "saturate(1.62) contrast(1.12)", overflow: "hidden" }}
     >
       <defs>
-        <filter id="heat-v3-soften" x="-4%" y="-4%" width="108%" height="108%">
-          <feGaussianBlur stdDeviation="0.34" />
+        <clipPath id="heatmap-v3-floor-mask" clipPathUnits="userSpaceOnUse">
+          {heatmapZones.map((zone) => (
+            <polygon key={`${zone.id}-mask`} points={zone.points} />
+          ))}
+        </clipPath>
+
+        <filter id="heat-v3-zone-soften" x="0" y="0" width="100%" height="100%">
+          <feGaussianBlur stdDeviation="0.18" />
         </filter>
-        <filter id="heat-v3-luma" x="-6%" y="-6%" width="112%" height="112%">
-          <feGaussianBlur stdDeviation="0.55" />
-        </filter>
+
+        {thermalSensors.map(({ sensor, value, pos }) => {
+          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
+          return (
+            <radialGradient key={id} id={id} cx={`${pos.x}%`} cy={`${pos.y}%`} r="28%" fx={`${pos.x}%`} fy={`${pos.y}%`}>
+              <stop offset="0%" stopColor={heatColor(layer, value, 0.48)} />
+              <stop offset="26%" stopColor={heatColor(layer, value, 0.34)} />
+              <stop offset="56%" stopColor={heatColor(layer, value, 0.18)} />
+              <stop offset="100%" stopColor={heatColor(layer, value, 0)} />
+            </radialGradient>
+          );
+        })}
+
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
@@ -635,29 +659,37 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
               id={`heat-${zone.id}`}
               cx={`${center.x}%`}
               cy={`${center.y}%`}
-              r="68%"
+              r="70%"
               fx={`${center.x}%`}
               fy={`${center.y}%`}
             >
-              <stop offset="0%" stopColor={heatColor(layer, value, 0.62)} />
-              <stop offset="50%" stopColor={heatColor(layer, value, 0.42)} />
-              <stop offset="100%" stopColor={heatColor(layer, value, 0.22)} />
+              <stop offset="0%" stopColor={heatColor(layer, value, 0.46)} />
+              <stop offset="52%" stopColor={heatColor(layer, value, 0.30)} />
+              <stop offset="100%" stopColor={heatColor(layer, value, 0.18)} />
             </radialGradient>
           );
         })}
       </defs>
 
-      {/* Base térmica integrada ao piso: menos bloco, mais textura. */}
-      <g style={{ mixBlendMode: "multiply" }} opacity="0.46" filter="url(#heat-v3-soften)">
-        {heatmapZones.map((zone) => {
-          const value = nearestZoneValue(zone, sensors, layer);
-          if (value === null) return null;
-          return <polygon key={`${zone.id}-base`} points={zone.points} fill={heatColor(layer, value, 0.38)} stroke="none" />;
+      {/* Camada térmica contínua recortada pela união dos polígonos: não vaza para fora da planta. */}
+      <g clipPath="url(#heatmap-v3-floor-mask)" style={{ mixBlendMode: "screen" }} opacity="0.54">
+        {thermalSensors.map(({ sensor }) => {
+          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
+          return <rect key={`${id}-field`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
         })}
       </g>
 
-      {/* Gradiente interno: centro mais presente e bordas mais naturais, sem alterar polígonos. */}
-      <g style={{ mixBlendMode: "soft-light" }} opacity="0.78" filter="url(#heat-v3-soften)">
+      {/* Base por zona, mais baixa: preserva referência de área sem parecer bloco. */}
+      <g style={{ mixBlendMode: "multiply" }} opacity="0.34" filter="url(#heat-v3-zone-soften)">
+        {heatmapZones.map((zone) => {
+          const value = nearestZoneValue(zone, sensors, layer);
+          if (value === null) return null;
+          return <polygon key={`${zone.id}-base`} points={zone.points} fill={heatColor(layer, value, 0.28)} stroke="none" />;
+        })}
+      </g>
+
+      {/* Gradiente interno suave por zona, com borda menos marcada. */}
+      <g style={{ mixBlendMode: "soft-light" }} opacity="0.70" filter="url(#heat-v3-zone-soften)">
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
@@ -665,12 +697,11 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      {/* Luz difusa mínima para tirar o aspecto chapado de bloco pintado. */}
-      <g style={{ mixBlendMode: "screen" }} opacity="0.18" filter="url(#heat-v3-luma)">
-        {heatmapZones.map((zone) => {
-          const value = nearestZoneValue(zone, sensors, layer);
-          if (value === null) return null;
-          return <polygon key={`${zone.id}-light`} points={zone.points} fill={`url(#heat-${zone.id})`} stroke="none" />;
+      {/* Luz difusa mínima para profundidade, também limitada aos polígonos. */}
+      <g clipPath="url(#heatmap-v3-floor-mask)" style={{ mixBlendMode: "overlay" }} opacity="0.18">
+        {thermalSensors.map(({ sensor }) => {
+          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
+          return <rect key={`${id}-light`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
         })}
       </g>
     </svg>
@@ -1219,7 +1250,6 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
 function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor }: { sensors: Sensor[]; layer: Layer; period: Period; onLayerChange: (l: Layer) => void; onSelectSensor: (s: Sensor) => void }) {
   const activeSensors = sensors.length ? sensors : sensorRegistry;
   const visibleSensors = layer === "co2" ? activeSensors.filter((sensor) => !isEm300Sensor(sensor)) : activeSensors;
-  const heatBackground = heatmapBackground(activeSensors, layer);
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
       <div className="absolute right-4 top-3 z-30 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
@@ -1229,8 +1259,6 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
           <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1536} height={1024} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-screen" style={{ background: heatBackground, filter: "blur(34px) saturate(2.25) contrast(1.18)", opacity: 0.44 }} />
-              <div className="absolute inset-0 transition-opacity duration-700 mix-blend-soft-light" style={{ background: heatBackground, filter: "blur(18px) saturate(1.8)", opacity: 0.20 }} />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.032),transparent_55%)] mix-blend-overlay" />
             </div>
