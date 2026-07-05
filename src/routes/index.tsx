@@ -302,8 +302,8 @@ const sensorMapPositions: Record<string, { x: number; y: number }> = {
   // Mantém as áreas atendidas/heatmap inalteradas; ajusta apenas a bolinha do sensor.
   // Regra aplicada: salas fechadas centralizadas; áreas abertas centralizadas na marcação rosa.
   // Alinhamentos visuais: S10/S11/S12 na horizontal, S7/S8 na horizontal, S13/S14/S15 na vertical.
-  "EM300-01": { x: 11.0, y: 14.0 }, // S1
-  "EM300-02": { x: 11.0, y: 26.0 }, // S2
+  "EM300-01": { x: 13.2, y: 15.2 }, // S1
+  "EM300-02": { x: 13.0, y: 26.0 }, // S2
   "EM300-03": { x: 28.5, y: 18.0 }, // S3
   "EM300-04": { x: 35.5, y: 25.5 }, // S4
   "EM300-05": { x: 48.0, y: 58.0 }, // S5
@@ -311,13 +311,13 @@ const sensorMapPositions: Record<string, { x: number; y: number }> = {
 
   "AM103L-07": { x: 65.5, y: 58.5 }, // S7
   "AM103L-08": { x: 86.0, y: 58.5 }, // S8
-  "AM103L-09": { x: 82.0, y: 81.0 }, // S9
+  "AM103L-09": { x: 82.0, y: 76.5 }, // S9
   "AM103L-10": { x: 51.0, y: 29.5 }, // S10
   "AM103L-11": { x: 68.5, y: 29.5 }, // S11
   "AM103L-12": { x: 87.0, y: 29.5 }, // S12
-  "AM103L-13": { x: 22.5, y: 42.0 }, // S13
-  "AM103L-14": { x: 22.5, y: 61.5 }, // S14
-  "AM103L-15": { x: 22.5, y: 82.0 }, // S15
+  "AM103L-13": { x: 22.5, y: 40.5 }, // S13
+  "AM103L-14": { x: 22.5, y: 60.0 }, // S14
+  "AM103L-15": { x: 22.5, y: 80.5 }, // S15
 };
 
 function mapPosition(sensor: Sensor) {
