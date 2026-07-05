@@ -298,23 +298,23 @@ const sensorRegistry: Sensor[] = [
 ];
 
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  // Posições provisórias recalibradas para a planta Fleury final, horizontal e sem perspectiva.
-  // Estes pontos devem ser ajustados quando o cliente validar a posição física real dos sensores.
-  "EM300-01": { x: 14, y: 70 },
-  "EM300-02": { x: 32, y: 61 },
-  "EM300-03": { x: 43, y: 62 },
-  "EM300-04": { x: 55, y: 62 },
-  "EM300-05": { x: 64, y: 64 },
-  "EM300-06": { x: 88, y: 61 },
-  "AM103L-07": { x: 12, y: 34 },
-  "AM103L-08": { x: 30, y: 31 },
-  "AM103L-09": { x: 47, y: 34 },
-  "AM103L-10": { x: 66, y: 30 },
-  "AM103L-11": { x: 85, y: 36 },
-  "AM103L-12": { x: 20, y: 51 },
-  "AM103L-13": { x: 38, y: 50 },
-  "AM103L-14": { x: 56, y: 48 },
-  "AM103L-15": { x: 76, y: 48 },
+  // Posições finais calibradas visualmente na planta horizontal Fleury.
+  // Mantêm os balões dentro da zona atendida pelo respectivo sensor.
+  "EM300-01": { x: 16.0, y: 17.8 },
+  "EM300-02": { x: 16.0, y: 26.4 },
+  "EM300-03": { x: 30.6, y: 18.5 },
+  "EM300-04": { x: 36.8, y: 24.2 },
+  "EM300-05": { x: 49.0, y: 54.0 },
+  "EM300-06": { x: 55.2, y: 74.5 },
+  "AM103L-07": { x: 64.4, y: 53.8 },
+  "AM103L-08": { x: 83.2, y: 53.8 },
+  "AM103L-09": { x: 82.0, y: 74.0 },
+  "AM103L-10": { x: 51.6, y: 27.2 },
+  "AM103L-11": { x: 68.4, y: 27.2 },
+  "AM103L-12": { x: 86.6, y: 27.2 },
+  "AM103L-13": { x: 30.2, y: 40.2 },
+  "AM103L-14": { x: 30.8, y: 56.2 },
+  "AM103L-15": { x: 30.8, y: 74.2 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -520,23 +520,24 @@ type HeatmapZone = {
 };
 
 const heatmapZones: HeatmapZone[] = [
-  // Mapa validado pela referência manual do cliente: S1..S15.
-  // Cada zona representa a área atendida pelo sensor, não um raio de proximidade.
-  { id: "s1_em300_01", label: "S1", sensors: ["EM300-01"], points: "7.1,13.8 20.4,13.8 20.4,21.6 7.1,21.6" },
-  { id: "s2_em300_02", label: "S2", sensors: ["EM300-02"], points: "7.1,23.6 20.1,23.6 20.1,29.0 7.1,29.0" },
-  { id: "s3_em300_03", label: "S3", sensors: ["EM300-03"], points: "22.2,13.6 39.8,13.6 39.8,18.5 31.9,18.5 31.5,28.9 22.2,28.9" },
-  { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "33.2,21.0 39.8,21.0 39.8,28.9 33.2,28.9" },
-  { id: "s5_em300_05", label: "S5", sensors: ["EM300-05"], points: "44.0,44.4 53.6,44.4 53.6,63.7 44.0,63.7" },
-  { id: "s6_em300_06", label: "S6", sensors: ["EM300-06"], points: "44.0,65.3 66.6,65.3 66.6,83.8 44.0,83.8" },
-  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.3,44.5 75.5,44.5 75.5,63.3 66.6,63.3 66.6,65.3 55.3,65.3" },
-  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.5,44.5 96.0,44.5 96.0,67.0 75.5,67.0" },
-  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "69.7,67.0 94.1,67.0 94.1,82.2 69.7,82.2" },
-  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "44.1,13.4 59.3,13.4 59.3,41.7 44.1,41.7" },
-  { id: "s11_am103l_11", label: "S11", sensors: ["AM103L-11"], points: "59.3,13.4 77.4,13.4 77.4,41.7 59.3,41.7" },
-  { id: "s12_am103l_12", label: "S12", sensors: ["AM103L-12"], points: "77.4,13.4 95.8,13.4 95.8,41.7 77.4,41.7" },
-  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.1,31.4 42.3,31.4 42.3,48.5 7.1,48.5" },
-  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.1,48.5 42.3,48.5 42.3,65.0 7.1,65.0" },
-  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.0 42.1,65.0 42.1,85.2 7.0,85.2" },
+  // Polígonos finais por zona S1–S15.
+  // Coordenadas percentuais sobre floor-plan-fleury-top.png.
+  // Sem stroke no produto final: as divisões não ficam aparentes ao usuário.
+  { id: "s1_em300_01", label: "S1", sensors: ["EM300-01"], points: "7.0,13.5 20.5,13.5 20.5,22.1 7.0,22.1" },
+  { id: "s2_em300_02", label: "S2", sensors: ["EM300-02"], points: "7.0,23.5 20.5,23.5 20.5,29.6 7.0,29.6" },
+  { id: "s3_em300_03", label: "S3", sensors: ["EM300-03"], points: "22.2,13.3 39.9,13.3 39.9,18.7 32.2,18.7 31.6,29.6 22.2,29.6" },
+  { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "33.1,21.2 39.9,21.2 39.9,29.6 33.1,29.6" },
+  { id: "s5_em300_05", label: "S5", sensors: ["EM300-05"], points: "44.0,44.5 53.9,44.5 53.9,64.5 44.0,64.5" },
+  { id: "s6_em300_06", label: "S6", sensors: ["EM300-06"], points: "44.0,65.5 66.8,65.5 66.8,84.6 44.0,84.6" },
+  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.2,44.5 75.6,44.5 75.6,66.0 66.8,66.0 66.8,65.5 55.2,65.5" },
+  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.6,44.5 96.0,44.5 96.0,67.2 75.6,67.2" },
+  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "66.8,66.0 94.2,66.0 94.2,83.6 66.8,83.6" },
+  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "41.2,13.3 59.3,13.3 59.3,42.3 41.2,42.3" },
+  { id: "s11_am103l_11", label: "S11", sensors: ["AM103L-11"], points: "59.3,13.3 77.4,13.3 77.4,42.3 59.3,42.3" },
+  { id: "s12_am103l_12", label: "S12", sensors: ["AM103L-12"], points: "77.4,13.3 96.0,13.3 96.0,42.3 77.4,42.3" },
+  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.0,31.4 42.3,31.4 42.3,48.7 7.0,48.7" },
+  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.0,48.7 42.3,48.7 42.3,65.5 7.0,65.5" },
+  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.5 42.3,65.5 42.3,85.2 7.0,85.2" },
 ];
 
 function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
