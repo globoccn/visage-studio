@@ -304,8 +304,8 @@ const sensorMapPositions: Record<string, { x: number; y: number }> = {
   // Alinhamentos visuais: S10/S11/S12 na horizontal, S7/S8 na horizontal, S13/S14/S15 na vertical.
   "EM300-01": { x: 13.2, y: 15.2 }, // S1
   "EM300-02": { x: 13.0, y: 26.0 }, // S2
-  "EM300-03": { x: 24.5, y: 16.8 }, // S3 - refinado para a marca vermelha
-  "EM300-04": { x: 34.9, y: 20.5 }, // S4 - refinado para o centro da sala
+  "EM300-03": { x: 27.3, y: 22.0 }, // S3 - validado na marca vermelha
+  "EM300-04": { x: 36.6, y: 25.1 }, // S4 - validado na marca verde
   "EM300-05": { x: 48.0, y: 55.7 }, // S5 - refinado para o centro da sala
   "EM300-06": { x: 54.0, y: 76.0 }, // S6 - refinado para a marca vermelha
 
