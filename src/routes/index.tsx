@@ -1971,21 +1971,34 @@ function ReportsView() {
     try {
       const response = await fetch(`${N8N_BASE}/fleury-report-daily`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/pdf",
+        },
         body: JSON.stringify({ timezone: "America/Sao_Paulo" }),
         cache: "no-store",
       });
 
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
-      const blob = await response.blob();
       const contentType = response.headers.get("content-type") || "";
-      if (!contentType.includes("pdf") && blob.type && !blob.type.includes("pdf")) {
-        const text = await blob.text();
-        throw new Error(text || "A resposta do workflow não retornou um PDF.");
+      const arrayBuffer = await response.arrayBuffer();
+      const header = new TextDecoder().decode(arrayBuffer.slice(0, 5));
+      const isPdf = header === "%PDF-";
+
+      if (!isPdf) {
+        const preview = new TextDecoder().decode(arrayBuffer.slice(0, 500)).trim();
+        const normalizedPreview = preview.replace(/\s+/g, " ").slice(0, 240);
+        const typeInfo = contentType ? ` (${contentType})` : "";
+        throw new Error(
+          normalizedPreview
+            ? `O workflow respondeu conteúdo que não é PDF${typeInfo}: ${normalizedPreview}`
+            : `O workflow não retornou um PDF válido${typeInfo}.`,
+        );
       }
 
-      const url = window.URL.createObjectURL(blob);
+      const pdfBlob = new Blob([arrayBuffer], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(pdfBlob);
       const date = new Date().toISOString().slice(0, 10);
       const link = document.createElement("a");
       link.href = url;
