@@ -450,18 +450,20 @@ function mixHex(a: string, b: string, t: number, opacity = 1) {
 }
 
 function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
-  // Heatmap V2 visual: paleta mais viva e saturada, mantendo os mesmos limites operacionais.
+  // Heatmap V4 visual: mantém os mesmos limites operacionais, mas usa uma paleta
+  // mais limpa para a camada térmica. O azul frio fica menos roxo/escuro e as
+  // transições passam por ciano/verde antes do amarelo e vermelho.
   if (layer === "temperature") {
     return [
-      { at: 20.9, color: "#08206f" },
-      { at: 21, color: "#0b4eea" },
-      { at: 22.9, color: "#1087ff" },
-      { at: 23, color: "#16c76a" },
-      { at: 24, color: "#51d12f" },
-      { at: 24.1, color: "#ffe126" },
-      { at: 24.9, color: "#ff9f1c" },
-      { at: 25, color: "#ff4d2e" },
-      { at: 26, color: "#c81e1e" },
+      { at: 20.9, color: "#0967d8" },
+      { at: 21, color: "#0d7cff" },
+      { at: 22.9, color: "#19b8ff" },
+      { at: 23, color: "#18d38a" },
+      { at: 24, color: "#82d837" },
+      { at: 24.1, color: "#ffe35a" },
+      { at: 24.9, color: "#ffad38" },
+      { at: 25, color: "#ff5a3d" },
+      { at: 26, color: "#e53935" },
     ];
   }
   if (layer === "humidity") {
@@ -486,13 +488,18 @@ function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
 }
 
 function normalizedHeatOpacity(layer: Layer, value: number, opacity: number) {
-  // Heatmap V2 visual: mais presença sem virar uma película opaca sobre a planta.
+  // Heatmap V4 visual: evita que faixas frias próximas de 21 °C fiquem pesadas
+  // demais e reforça levemente a faixa ideal, mantendo a leitura operacional.
+  const isColdTemperature = layer === "temperature" && value < 21;
+  const isFreshTemperature = layer === "temperature" && value >= 21 && value < 23;
   const isYellowTemperature = layer === "temperature" && value >= 24.1 && value < 25;
   const isYellowCo2 = layer === "co2" && value >= 900 && value <= 1000;
   const isGreenTemperature = layer === "temperature" && value >= 23 && value <= 24;
   const isIdealHumidity = layer === "humidity" && value >= 40 && value <= 60;
-  if (isYellowTemperature || isYellowCo2) return opacity * 0.82;
-  if (isGreenTemperature || isIdealHumidity) return opacity * 1.08;
+  if (isColdTemperature) return opacity * 0.86;
+  if (isFreshTemperature) return opacity * 0.94;
+  if (isYellowTemperature || isYellowCo2) return opacity * 0.88;
+  if (isGreenTemperature || isIdealHumidity) return opacity * 1.06;
   return opacity;
 }
 
@@ -618,32 +625,56 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
 
   if (!thermalSensors.length) return null;
 
+  const avgValue = average(thermalSensors.map(({ value }) => value));
+
   return (
     <svg
-      className="absolute inset-0 h-full w-full pointer-events-none transition-opacity duration-500"
+      className="absolute inset-0 h-full w-full pointer-events-none transition-opacity duration-700"
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
-      style={{ filter: "saturate(1.62) contrast(1.12)", overflow: "hidden" }}
+      style={{ filter: "saturate(1.38) contrast(1.08) brightness(1.03)", overflow: "hidden" }}
     >
       <defs>
-        <clipPath id="heatmap-v3-floor-mask" clipPathUnits="userSpaceOnUse">
+        <clipPath id="heatmap-v4-floor-mask" clipPathUnits="userSpaceOnUse">
           {heatmapZones.map((zone) => (
             <polygon key={`${zone.id}-mask`} points={zone.points} />
           ))}
         </clipPath>
 
-        <filter id="heat-v3-zone-soften" x="0" y="0" width="100%" height="100%">
-          <feGaussianBlur stdDeviation="0.18" />
+        <filter id="heat-v4-soft-field" x="-4%" y="-4%" width="108%" height="108%">
+          <feGaussianBlur stdDeviation="0.42" />
         </filter>
+
+        <filter id="heat-v4-zone-feather" x="-2%" y="-2%" width="104%" height="104%">
+          <feGaussianBlur stdDeviation="0.24" />
+        </filter>
+
+        <filter id="heat-v4-organic-noise" x="0" y="0" width="100%" height="100%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.9 1.15" numOctaves="2" seed="17" result="noise" />
+          <feColorMatrix
+            in="noise"
+            type="matrix"
+            values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 .18 0"
+            result="texture"
+          />
+          <feBlend in="SourceGraphic" in2="texture" mode="soft-light" />
+        </filter>
+
+        <radialGradient id="heat-v4-ambient" cx="50%" cy="52%" r="72%" fx="50%" fy="52%">
+          <stop offset="0%" stopColor={heatColor(layer, avgValue, 0.16)} />
+          <stop offset="58%" stopColor={heatColor(layer, avgValue, 0.09)} />
+          <stop offset="100%" stopColor={heatColor(layer, avgValue, 0)} />
+        </radialGradient>
 
         {thermalSensors.map(({ sensor, value, pos }) => {
           const id = svgSafeId(`thermal-${sensor.sensor_id}`);
           return (
-            <radialGradient key={id} id={id} cx={`${pos.x}%`} cy={`${pos.y}%`} r="28%" fx={`${pos.x}%`} fy={`${pos.y}%`}>
-              <stop offset="0%" stopColor={heatColor(layer, value, 0.48)} />
-              <stop offset="26%" stopColor={heatColor(layer, value, 0.34)} />
-              <stop offset="56%" stopColor={heatColor(layer, value, 0.18)} />
+            <radialGradient key={id} id={id} cx={`${pos.x}%`} cy={`${pos.y}%`} r="34%" fx={`${pos.x}%`} fy={`${pos.y}%`}>
+              <stop offset="0%" stopColor={heatColor(layer, value, 0.34)} />
+              <stop offset="22%" stopColor={heatColor(layer, value, 0.25)} />
+              <stop offset="48%" stopColor={heatColor(layer, value, 0.13)} />
+              <stop offset="78%" stopColor={heatColor(layer, value, 0.045)} />
               <stop offset="100%" stopColor={heatColor(layer, value, 0)} />
             </radialGradient>
           );
@@ -659,37 +690,29 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
               id={`heat-${zone.id}`}
               cx={`${center.x}%`}
               cy={`${center.y}%`}
-              r="70%"
+              r="82%"
               fx={`${center.x}%`}
               fy={`${center.y}%`}
             >
-              <stop offset="0%" stopColor={heatColor(layer, value, 0.46)} />
-              <stop offset="52%" stopColor={heatColor(layer, value, 0.30)} />
-              <stop offset="100%" stopColor={heatColor(layer, value, 0.18)} />
+              <stop offset="0%" stopColor={heatColor(layer, value, 0.24)} />
+              <stop offset="46%" stopColor={heatColor(layer, value, 0.16)} />
+              <stop offset="100%" stopColor={heatColor(layer, value, 0.07)} />
             </radialGradient>
           );
         })}
       </defs>
 
-      {/* Camada térmica contínua recortada pela união dos polígonos: não vaza para fora da planta. */}
-      <g clipPath="url(#heatmap-v3-floor-mask)" style={{ mixBlendMode: "screen" }} opacity="0.54">
+      {/* V4: camada térmica contínua, sempre clipada pelos polígonos existentes. */}
+      <g clipPath="url(#heatmap-v4-floor-mask)" filter="url(#heat-v4-soft-field)" style={{ mixBlendMode: "screen" }} opacity="0.46">
+        <rect x="0" y="0" width="100" height="100" fill="url(#heat-v4-ambient)" />
         {thermalSensors.map(({ sensor }) => {
           const id = svgSafeId(`thermal-${sensor.sensor_id}`);
           return <rect key={`${id}-field`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
         })}
       </g>
 
-      {/* Base por zona, mais baixa: preserva referência de área sem parecer bloco. */}
-      <g style={{ mixBlendMode: "multiply" }} opacity="0.34" filter="url(#heat-v3-zone-soften)">
-        {heatmapZones.map((zone) => {
-          const value = nearestZoneValue(zone, sensors, layer);
-          if (value === null) return null;
-          return <polygon key={`${zone.id}-base`} points={zone.points} fill={heatColor(layer, value, 0.28)} stroke="none" />;
-        })}
-      </g>
-
-      {/* Gradiente interno suave por zona, com borda menos marcada. */}
-      <g style={{ mixBlendMode: "soft-light" }} opacity="0.70" filter="url(#heat-v3-zone-soften)">
+      {/* Referência de área discreta: mantém zonas coerentes sem desenhar blocos aparentes. */}
+      <g clipPath="url(#heatmap-v4-floor-mask)" style={{ mixBlendMode: "soft-light" }} opacity="0.74" filter="url(#heat-v4-zone-feather)">
         {heatmapZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
@@ -697,8 +720,13 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      {/* Luz difusa mínima para profundidade, também limitada aos polígonos. */}
-      <g clipPath="url(#heatmap-v3-floor-mask)" style={{ mixBlendMode: "overlay" }} opacity="0.18">
+      {/* Profundidade orgânica: leve variação de textura dentro da máscara para remover aspecto chapado. */}
+      <g clipPath="url(#heatmap-v4-floor-mask)" opacity="0.16" style={{ mixBlendMode: "overlay" }} filter="url(#heat-v4-organic-noise)">
+        <rect x="0" y="0" width="100" height="100" fill="rgba(255,255,255,0.22)" />
+      </g>
+
+      {/* Luz ambiente muito sutil, também clipada, para integrar a mancha ao piso. */}
+      <g clipPath="url(#heatmap-v4-floor-mask)" style={{ mixBlendMode: "overlay" }} opacity="0.10">
         {thermalSensors.map(({ sensor }) => {
           const id = svgSafeId(`thermal-${sensor.sensor_id}`);
           return <rect key={`${id}-light`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
