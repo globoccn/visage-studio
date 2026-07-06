@@ -467,14 +467,19 @@ function colorStopsForLayer(layer: Layer): { at: number; color: string }[] {
     ];
   }
   if (layer === "humidity") {
+    // Heatmap V4.1: a escala visual agora acompanha a legenda operacional.
+    // 40–60% permanece verde/ideal; abaixo disso tende a seco/quente,
+    // acima disso tende a úmido/frio.
     return [
       { at: 20, color: "#c81e1e" },
-      { at: 30, color: "#ff4d2e" },
-      { at: 40, color: "#ff9f1c" },
+      { at: 30, color: "#ff5a36" },
+      { at: 39.9, color: "#ffb020" },
+      { at: 40, color: "#20c966" },
       { at: 50, color: "#24cc63" },
-      { at: 60, color: "#55d130" },
-      { at: 70, color: "#00c7e6" },
-      { at: 80, color: "#0b58ff" },
+      { at: 60, color: "#20c966" },
+      { at: 60.1, color: "#2dd4bf" },
+      { at: 70, color: "#16b8f3" },
+      { at: 80, color: "#2563eb" },
     ];
   }
   return [
@@ -556,6 +561,17 @@ function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
     .filter((value): value is number => typeof value === "number");
 }
 
+function zoneHasDirectValue(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
+  return valuesForZone(zone, sensors, layer).length > 0;
+}
+
+function renderableHeatmapZones(sensors: Sensor[], layer: Layer) {
+  // Em CO₂, somente áreas com sensor AM103L próprio devem receber camada térmica.
+  // Áreas EM300 não medem CO₂ e ficam neutras/translúcidas, sem interpolação.
+  if (layer !== "co2") return heatmapZones;
+  return heatmapZones.filter((zone) => zoneHasDirectValue(zone, sensors, layer));
+}
+
 function average(values: number[]) {
   return values.reduce((acc, value) => acc + value, 0) / values.length;
 }
@@ -573,9 +589,14 @@ function nearestZoneValue(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
   const zoneValues = valuesForZone(zone, sensors, layer);
   if (zoneValues.length) return average(zoneValues);
 
-  // Fallback visual: se uma zona ainda não tiver sensor válido na camada, usa o sensor válido mais próximo.
+  // V4.1: CO₂ não usa fallback por proximidade. Se a zona não possui
+  // sensor CO₂ próprio, ela deve permanecer neutra para não comunicar
+  // uma leitura inexistente.
+  if (layer === "co2") return null;
+
+  // Fallback visual: em temperatura/umidade, se uma zona ainda não tiver
+  // sensor válido na camada, usa o sensor válido mais próximo.
   const valid = sensors
-    .filter((sensor) => !(layer === "co2" && isEm300Sensor(sensor)))
     .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer), pos: mapPosition(sensor) }))
     .filter((item): item is { sensor: Sensor; value: number; pos: { x: number; y: number } } => typeof item.value === "number");
 
@@ -626,6 +647,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
   if (!thermalSensors.length) return null;
 
   const avgValue = average(thermalSensors.map(({ value }) => value));
+  const renderZones = renderableHeatmapZones(sensors, layer);
 
   return (
     <svg
@@ -637,7 +659,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
     >
       <defs>
         <clipPath id="heatmap-v4-floor-mask" clipPathUnits="userSpaceOnUse">
-          {heatmapZones.map((zone) => (
+          {renderZones.map((zone) => (
             <polygon key={`${zone.id}-mask`} points={zone.points} />
           ))}
         </clipPath>
@@ -680,7 +702,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
           );
         })}
 
-        {heatmapZones.map((zone) => {
+        {renderZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
           const center = zoneCentroid(zone);
@@ -713,7 +735,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
 
       {/* Referência de área discreta: mantém zonas coerentes sem desenhar blocos aparentes. */}
       <g clipPath="url(#heatmap-v4-floor-mask)" style={{ mixBlendMode: "soft-light" }} opacity="0.74" filter="url(#heat-v4-zone-feather)">
-        {heatmapZones.map((zone) => {
+        {renderZones.map((zone) => {
           const value = nearestZoneValue(zone, sensors, layer);
           if (value === null) return null;
           return <polygon key={`${zone.id}-gradient-fill`} points={zone.points} fill={`url(#heat-${zone.id})`} stroke="none" />;
