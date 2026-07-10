@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   LayoutDashboard,
   Radio,
@@ -609,7 +609,6 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
 
   if (!thermalSensors.length) return null;
 
-  const avgValue = average(thermalSensors.map(({ value }) => value));
   const renderZones = renderableHeatmapZones(sensors, layer);
 
   return (
@@ -618,619 +617,90 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
-      style={{ filter: "saturate(1.38) contrast(1.08) brightness(1.03)", overflow: "hidden" }}
+      style={{ filter: "saturate(1.25) contrast(1.03)", overflow: "hidden" }}
     >
       <defs>
-        <clipPath id="heatmap-v4-floor-mask" clipPathUnits="userSpaceOnUse">
-          {renderZones.map((zone) => (
-            <polygon key={`${zone.id}-mask`} points={zone.points} />
-          ))}
-        </clipPath>
-
-        <filter id="heat-v4-soft-field" x="-4%" y="-4%" width="108%" height="108%">
-          <feGaussianBlur stdDeviation="0.42" />
+        <filter id="heat-zone-soft-edge" x="-12%" y="-12%" width="124%" height="124%">
+          <feGaussianBlur stdDeviation="1.45" />
         </filter>
 
-        <filter id="heat-v4-zone-feather" x="-2%" y="-2%" width="104%" height="104%">
-          <feGaussianBlur stdDeviation="0.24" />
+        <filter id="heat-field-soft" x="-8%" y="-8%" width="116%" height="116%">
+          <feGaussianBlur stdDeviation="0.62" />
         </filter>
-
-        <filter id="heat-v4-organic-noise" x="0" y="0" width="100%" height="100%">
-          <feTurbulence type="fractalNoise" baseFrequency="0.9 1.15" numOctaves="2" seed="17" result="noise" />
-          <feColorMatrix
-            in="noise"
-            type="matrix"
-            values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 .18 0"
-            result="texture"
-          />
-          <feBlend in="SourceGraphic" in2="texture" mode="soft-light" />
-        </filter>
-
-        <radialGradient id="heat-v4-ambient" cx="50%" cy="52%" r="72%" fx="50%" fy="52%">
-          <stop offset="0%" stopColor={heatColor(layer, avgValue, 0.16)} />
-          <stop offset="58%" stopColor={heatColor(layer, avgValue, 0.09)} />
-          <stop offset="100%" stopColor={heatColor(layer, avgValue, 0)} />
-        </radialGradient>
-
-        {thermalSensors.map(({ sensor, value, pos }) => {
-          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
-          return (
-            <radialGradient key={id} id={id} cx={`${pos.x}%`} cy={`${pos.y}%`} r="34%" fx={`${pos.x}%`} fy={`${pos.y}%`}>
-              <stop offset="0%" stopColor={heatColor(layer, value, 0.34)} />
-              <stop offset="22%" stopColor={heatColor(layer, value, 0.25)} />
-              <stop offset="48%" stopColor={heatColor(layer, value, 0.13)} />
-              <stop offset="78%" stopColor={heatColor(layer, value, 0.045)} />
-              <stop offset="100%" stopColor={heatColor(layer, value, 0)} />
-            </radialGradient>
-          );
-        })}
 
         {renderZones.map((zone) => {
-          const value = nearestZoneValue(zone, sensors, layer);
-          if (value === null) return null;
-          const center = zoneCentroid(zone);
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor) return null;
+          const value = valueForLayer(sensor, layer);
+          if (typeof value !== "number") return null;
+          const pos = mapPosition(sensor);
+          const safeId = svgSafeId(zone.id);
           return (
-            <radialGradient
-              key={`${zone.id}-gradient`}
-              id={`heat-${zone.id}`}
-              cx={`${center.x}%`}
-              cy={`${center.y}%`}
-              r="82%"
-              fx={`${center.x}%`}
-              fy={`${center.y}%`}
-            >
-              <stop offset="0%" stopColor={heatColor(layer, value, 0.24)} />
-              <stop offset="46%" stopColor={heatColor(layer, value, 0.16)} />
-              <stop offset="100%" stopColor={heatColor(layer, value, 0.07)} />
-            </radialGradient>
+            <Fragment key={`${zone.id}-defs`}>
+              <mask id={`mask-${safeId}`} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
+                <rect x="0" y="0" width="100" height="100" fill="black" />
+                <polygon points={zone.points} fill="white" filter="url(#heat-zone-soft-edge)" />
+              </mask>
+              <radialGradient
+                id={`field-${safeId}`}
+                cx={`${pos.x}%`}
+                cy={`${pos.y}%`}
+                r="62%"
+                fx={`${pos.x}%`}
+                fy={`${pos.y}%`}
+              >
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.46)} />
+                <stop offset="22%" stopColor={heatColor(layer, value, 0.34)} />
+                <stop offset="48%" stopColor={heatColor(layer, value, 0.22)} />
+                <stop offset="76%" stopColor={heatColor(layer, value, 0.11)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.035)} />
+              </radialGradient>
+            </Fragment>
           );
         })}
       </defs>
 
-      {/* V4: camada térmica contínua, sempre clipada pelos polígonos existentes. */}
-      <g clipPath="url(#heatmap-v4-floor-mask)" filter="url(#heat-v4-soft-field)" style={{ mixBlendMode: "screen" }} opacity="0.46">
-        <rect x="0" y="0" width="100" height="100" fill="url(#heat-v4-ambient)" />
-        {thermalSensors.map(({ sensor }) => {
-          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
-          return <rect key={`${id}-field`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
-        })}
-      </g>
-
-      {/* Referência de área discreta: mantém zonas coerentes sem desenhar blocos aparentes. */}
-      <g clipPath="url(#heatmap-v4-floor-mask)" style={{ mixBlendMode: "soft-light" }} opacity="0.74" filter="url(#heat-v4-zone-feather)">
+      {/* As áreas desenhadas servem somente como máscara lógica. As bordas são
+          desfocadas e nunca recebem stroke, evitando quadrados visíveis. */}
+      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "screen" }} opacity="0.78">
         {renderZones.map((zone) => {
-          const value = nearestZoneValue(zone, sensors, layer);
-          if (value === null) return null;
-          return <polygon key={`${zone.id}-gradient-fill`} points={zone.points} fill={`url(#heat-${zone.id})`} stroke="none" />;
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
+          const safeId = svgSafeId(zone.id);
+          return (
+            <rect
+              key={`${zone.id}-soft-field`}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              fill={`url(#field-${safeId})`}
+              mask={`url(#mask-${safeId})`}
+            />
+          );
         })}
       </g>
 
-      {/* Profundidade orgânica: leve variação de textura dentro da máscara para remover aspecto chapado. */}
-      <g clipPath="url(#heatmap-v4-floor-mask)" opacity="0.16" style={{ mixBlendMode: "overlay" }} filter="url(#heat-v4-organic-noise)">
-        <rect x="0" y="0" width="100" height="100" fill="rgba(255,255,255,0.22)" />
-      </g>
-
-      {/* Luz ambiente muito sutil, também clipada, para integrar a mancha ao piso. */}
-      <g clipPath="url(#heatmap-v4-floor-mask)" style={{ mixBlendMode: "overlay" }} opacity="0.10">
-        {thermalSensors.map(({ sensor }) => {
-          const id = svgSafeId(`thermal-${sensor.sensor_id}`);
-          return <rect key={`${id}-light`} x="0" y="0" width="100" height="100" fill={`url(#${id})`} />;
+      {/* Integração muito suave com a textura do piso, sem revelar os polígonos. */}
+      <g style={{ mixBlendMode: "soft-light" }} opacity="0.18">
+        {renderZones.map((zone) => {
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
+          const safeId = svgSafeId(zone.id);
+          return (
+            <rect
+              key={`${zone.id}-floor-blend`}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              fill={`url(#field-${safeId})`}
+              mask={`url(#mask-${safeId})`}
+            />
+          );
         })}
       </g>
     </svg>
-  );
-}
-
-function layerValueText(sensor: Sensor, layer: Layer) {
-  const value = valueForLayer(sensor, layer);
-  if (value === null) return "--";
-  return layer === "co2" ? `${formatInt(value)} ppm` : `${formatDecimal(value, 1)} ${layerConfig[layer].unit}`;
-}
-
-function markerValueText(sensor: Sensor, layer: Layer) {
-  const value = valueForLayer(sensor, layer);
-  if (value === null) return "--";
-  if (layer === "co2") return `${formatInt(value)}`;
-  if (layer === "humidity") return `${formatDecimal(value, 0)}%`;
-  return `${formatDecimal(value, 1)}°`;
-}
-
-function markerUnitText(layer: Layer) {
-  return layer === "co2" ? "ppm" : "";
-}
-
-function formatDecimal(value: number | null | undefined, digits = 1) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "--";
-  return value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-}
-
-function formatInt(value: number | null | undefined) {
-  if (typeof value !== "number" || Number.isNaN(value)) return "--";
-  return Math.round(value).toLocaleString("pt-BR");
-}
-
-function makeMockDashboard(period: Period): DashboardPayload {
-  const factor = period === "today" ? 0 : period === "week" ? -0.2 : -0.4;
-  const sensors = sensorRegistry.map((s, i) => ({
-    ...s,
-    timestamp: new Date(Date.now() - (i % 4) * 60_000).toISOString(),
-    temperature: typeof s.temperature === "number" ? +(s.temperature + factor + Math.sin(i) * 0.12).toFixed(1) : null,
-    humidity: typeof s.humidity === "number" ? +(s.humidity + Math.cos(i) * 0.4).toFixed(1) : null,
-    co2: typeof s.co2 === "number" ? Math.round(s.co2 + Math.sin(i / 2) * 20) : null,
-  }));
-  const temps = sensors.map((s) => s.temperature).filter((v): v is number => typeof v === "number");
-  const hums = sensors.map((s) => s.humidity).filter((v): v is number => typeof v === "number");
-  const co2s = sensors.map((s) => s.co2).filter((v): v is number => typeof v === "number");
-  const alarms = sensors.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).map((s) => ({
-    sensor_id: s.sensor_id,
-    sensor_name: s.sensor_name,
-    area: s.area,
-    type: s.temperature! < 21.5 ? "temperature_low" : "temperature_high",
-    severity: "warning",
-    value: s.temperature,
-    timestamp: s.timestamp,
-  }));
-  return {
-    ok: true,
-    updatedAt: new Date().toISOString(),
-    refreshSeconds: 300,
-    expectedSensors: sensorRegistry.length,
-    sensorsOnline: sensors.length,
-    kpis: {
-      temperatureAvg: temps.reduce((a, b) => a + b, 0) / temps.length,
-      temperatureMin: Math.min(...temps),
-      temperatureMax: Math.max(...temps),
-      humidityAvg: hums.reduce((a, b) => a + b, 0) / hums.length,
-      co2Avg: co2s.reduce((a, b) => a + b, 0) / co2s.length,
-      activeAlarms: alarms.length,
-    },
-    alarms,
-    sensors,
-  };
-}
-
-function makeMockHistory(period: Period): HistoryPayload {
-  const points = period === "today" ? 24 : period === "week" ? 7 : 30;
-  const records: HistoryRecord[] = [];
-  for (let i = 0; i < points; i++) {
-    sensorRegistry.forEach((s, idx) => {
-      const d = new Date();
-      if (period === "today") d.setHours(i, 0, 0, 0);
-      else d.setDate(d.getDate() - (points - 1 - i));
-      records.push({
-        ...s,
-        reading_time: d.toISOString(),
-        temperature: +(22.8 + Math.sin(i / 2 + idx / 3) * 1.2 + (idx === 5 ? 1.5 : 0)).toFixed(1),
-        humidity: +(48 + Math.cos(i / 3 + idx / 5) * 4).toFixed(1),
-        co2: Math.round(610 + Math.sin(i / 2.5 + idx / 4) * 90 + (idx === 5 ? 120 : 0)),
-      });
-    });
-  }
-  return { ok: true, count: records.length, records };
-}
-
-function buildChartSeries(history: HistoryPayload | null, period: Period) {
-  const records = history?.records || [];
-  const groups = new Map<string, HistoryRecord[]>();
-  records.forEach((r) => {
-    const dt = new Date(r.reading_time || r.timestamp || Date.now());
-    const key = period === "today" ? `${String(dt.getHours()).padStart(2, "0")}:00` : `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}`;
-    groups.set(key, [...(groups.get(key) || []), r]);
-  });
-  return Array.from(groups.entries()).map(([t, items]) => {
-    const avg = (field: Layer) => {
-      const values = items.map((i) => i[field]).filter((v): v is number => typeof v === "number");
-      return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-    };
-    const temps = items.map((i) => i.temperature).filter((v): v is number => typeof v === "number");
-    return {
-      t,
-      temp: +avg("temperature").toFixed(1),
-      h: +avg("humidity").toFixed(1),
-      c: Math.round(avg("co2")),
-      min: temps.length ? Math.min(...temps) : 0,
-      max: temps.length ? Math.max(...temps) : 0,
-    };
-  });
-}
-
-
-function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sensor, field: Layer, fallbackSpread: number, seed: number) {
-  const records = (history?.records || [])
-    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
-    .slice(-24);
-
-  if (!records.length) return [];
-
-  return records.map((r, i) => {
-    const dt = new Date(r.reading_time || r.timestamp || Date.now());
-    const value = r[field];
-    return {
-      x: `${String(dt.getHours()).padStart(2, "0")}h`,
-      y: Number((typeof value === "number" ? value : sensor[field] ?? 0).toFixed(field === "co2" ? 0 : 1)),
-    };
-  });
-}
-
-
-function buildSensorDetailSeries(history: HistoryPayload | null, sensor: Sensor, period: Period) {
-  const records = (history?.records || [])
-    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
-    .sort((a, b) => new Date(a.reading_time || a.timestamp || 0).getTime() - new Date(b.reading_time || b.timestamp || 0).getTime())
-    .slice(period === "today" ? -48 : -80);
-
-  const source = records.length
-    ? records
-    : [{ ...sensor, reading_time: sensor.timestamp || new Date().toISOString() } as HistoryRecord];
-
-  return source.map((r) => {
-    const dt = new Date(r.reading_time || r.timestamp || Date.now());
-    return {
-      t: period === "today" ? formatTimePt(dt) : formatDatePt(dt),
-      temp: typeof r.temperature === "number" ? Number(r.temperature.toFixed(1)) : null,
-      h: typeof r.humidity === "number" ? Number(r.humidity.toFixed(1)) : null,
-      c: typeof r.co2 === "number" ? Math.round(r.co2) : null,
-    };
-  });
-}
-
-function calculateDailySensorStats(sensors: Sensor[], history: HistoryPayload | null) {
-  const baseRecords = history?.records || [];
-  const today = new Date().toISOString().slice(0, 10);
-  const records = baseRecords.filter((r) => {
-    const t = r.reading_time || r.timestamp;
-    return !t || t.slice(0, 10) === today;
-  });
-  const source = records.length ? records : sensors;
-  const nums = (field: Layer) => source.map((s) => s[field]).filter((v): v is number => typeof v === "number");
-  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
-  const temps = nums("temperature");
-  const hums = nums("humidity");
-  const co2s = nums("co2");
-  return {
-    temperatureAvg: avg(temps),
-    temperatureMin: temps.length ? Math.min(...temps) : null,
-    temperatureMax: temps.length ? Math.max(...temps) : null,
-    humidityAvg: avg(hums),
-    co2Avg: avg(co2s),
-  };
-}
-
-function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null, history: HistoryPayload | null): Sensor[] {
-  if (period === "today" && dashboard?.sensors?.length) return dashboard.sensors;
-  const records = history?.records || [];
-  if (!records.length) return sensorRegistry;
-  const grouped = new Map<string, HistoryRecord[]>();
-  records.filter(isInstalledSensorLike).forEach((r) => grouped.set(r.dev_eui, [...(grouped.get(r.dev_eui) || []), r]));
-  return Array.from(grouped.entries()).map(([dev, items]) => {
-    const base = sensorRegistry.find((s) => s.dev_eui === dev) || (items[0] as Sensor);
-    const avg = (field: Layer) => {
-      const values = items.map((i) => i[field]).filter((v): v is number => typeof v === "number");
-      return values.length ? values.reduce((a, b) => a + b, 0) / values.length : null;
-    };
-    return {
-      ...base,
-      temperature: avg("temperature"),
-      humidity: avg("humidity"),
-      co2: avg("co2"),
-      timestamp: items.at(-1)?.reading_time || items.at(-1)?.timestamp,
-    };
-  });
-}
-
-function isValidDate(date: Date) {
-  return date instanceof Date && !Number.isNaN(date.getTime());
-}
-
-function formatDatePt(value: Date | string | null | undefined) {
-  if (!value) return "--";
-  const date = value instanceof Date ? value : new Date(value);
-  if (!isValidDate(date)) return "--";
-  return date.toLocaleDateString("pt-BR");
-}
-
-function formatTimePt(value: Date | string | null | undefined) {
-  if (!value) return "--";
-  const date = value instanceof Date ? value : new Date(value);
-  if (!isValidDate(date)) return "--";
-  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-}
-
-function communicationStatus(sensor: Sensor | null | undefined) {
-  const timestamp = sensor?.timestamp;
-  if (!timestamp) return { label: "Sem leitura", className: "text-muted-foreground" };
-  const date = new Date(timestamp);
-  if (!isValidDate(date)) return { label: "Sem leitura", className: "text-muted-foreground" };
-  const ageMinutes = (Date.now() - date.getTime()) / 60000;
-  if (ageMinutes <= 15) return { label: "Online", className: "text-success" };
-  if (ageMinutes <= 30) return { label: "Atenção", className: "text-warning" };
-  return { label: "Offline", className: "text-critical" };
-}
-
-async function parseResponseJSON<T>(res: Response, context: string): Promise<T> {
-  const text = await res.text();
-  if (!text.trim()) {
-    if (context.includes("/fleury-history")) return { ok: true, count: 0, records: [] } as T;
-    if (context.includes("/fleury-dashboard-latest")) return { ok: true, sensors: [], alarms: [], kpis: {}, expectedSensors: sensorRegistry.length, sensorsOnline: 0 } as T;
-    if (context.includes("/fleury-settings")) return { ok: true, settings: DEFAULT_ALARM_SETTINGS } as T;
-    throw new Error(`${context}: resposta vazia`);
-  }
-  try {
-    return JSON.parse(text) as T;
-  } catch {
-    throw new Error(`${context}: resposta não é JSON válido`);
-  }
-}
-
-async function fetchJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await parseResponseJSON<T>(res, url);
-}
-
-
-function numberOrNull(value: any): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-}
-
-function normalizeSensor(raw: any): Sensor {
-  const devEui = String(raw?.dev_eui || raw?.devEUI || raw?.deviceEUI || "").toUpperCase();
-  const base = sensorRegistry.find((sensor) => sensor.dev_eui === devEui || sensor.sensor_id === raw?.sensor_id) || sensorRegistry.find((sensor) => sensor.sensor_id === raw?.sensor_id);
-  return {
-    ...(base || sensorRegistry[0]),
-    ...raw,
-    dev_eui: devEui || raw?.dev_eui || base?.dev_eui || "",
-    sensor_id: raw?.sensor_id || base?.sensor_id || devEui,
-    sensor_name: raw?.sensor_name || base?.sensor_name || raw?.sensor_id || devEui,
-    model: raw?.model || base?.model || (String(raw?.sensor_id || base?.sensor_id || raw?.sensor_name || "").toUpperCase().includes("EM300") ? "EM300-TH" : "AM103L"),
-    area: raw?.area || base?.area || "Sem cadastro",
-    floor: raw?.floor || base?.floor || "Térreo",
-    x: numberOrNull(raw?.x ?? base?.x),
-    y: numberOrNull(raw?.y ?? base?.y),
-    temperature: numberOrNull(raw?.temperature),
-    humidity: numberOrNull(raw?.humidity),
-    co2: numberOrNull(raw?.co2),
-    battery: numberOrNull(raw?.battery),
-    rssi: numberOrNull(raw?.rssi),
-    snr: numberOrNull(raw?.snr),
-    timestamp: raw?.timestamp || raw?.reading_time || raw?.received_at || base?.timestamp,
-  };
-}
-
-function normalizeDashboard(payload: any): DashboardPayload {
-  const source = payload && typeof payload === "object" ? payload : {};
-  const sensors = Array.isArray(source.sensors)
-    ? source.sensors.filter(isInstalledSensorLike).map(normalizeSensor)
-    : sensorRegistry;
-  const online = sensors.filter((sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number").length;
-  const kpis = source.kpis || {};
-  return {
-    ok: source.ok !== false,
-    updatedAt: source.updatedAt || source.updated_at || "",
-    refreshSeconds: Number(source.refreshSeconds || source.refresh_seconds || 300),
-    expectedSensors: sensorRegistry.length,
-    sensorsOnline: online,
-    sensors,
-    alarms: Array.isArray(source.alarms)
-      ? source.alarms.filter((alarm: any) => isInstalledSensorLike(alarm))
-      : [],
-    kpis: {
-      temperatureAvg: numberOrNull(kpis.temperatureAvg ?? kpis.temperature_avg),
-      temperatureMin: numberOrNull(kpis.temperatureMin ?? kpis.temperature_min),
-      temperatureMax: numberOrNull(kpis.temperatureMax ?? kpis.temperature_max),
-      humidityAvg: numberOrNull(kpis.humidityAvg ?? kpis.humidity_avg),
-      co2Avg: numberOrNull(kpis.co2Avg ?? kpis.co2_avg),
-      activeAlarms: Number(kpis.activeAlarms ?? kpis.active_alarms ?? 0),
-    },
-  };
-}
-
-function periodStart(period: Period) {
-  const start = new Date();
-  if (period === "today") start.setHours(0, 0, 0, 0);
-  else if (period === "week") start.setDate(start.getDate() - 7);
-  else start.setDate(start.getDate() - 30);
-  return start;
-}
-
-function normalizeHistory(payload: any, period: Period): HistoryPayload {
-  const source = payload && typeof payload === "object" ? payload : {};
-  const rawRecords = (Array.isArray(payload) ? payload : Array.isArray(source.records) ? source.records : Array.isArray(source.data) ? source.data : Array.isArray(source.history) ? source.history : [])
-    .filter(isInstalledSensorLike);
-  const start = periodStart(period).getTime();
-  const records = rawRecords
-    .map((record: any) => ({ ...normalizeSensor(record), reading_time: record?.reading_time || record?.timestamp }))
-    .filter((record: HistoryRecord) => {
-      const time = record.reading_time || record.timestamp;
-      if (!time) return false;
-      const t = new Date(time).getTime();
-      return Number.isFinite(t) && t >= start;
-    });
-  return { ok: source.ok !== false, count: records.length, records };
-}
-
-function emptyDashboard(): DashboardPayload {
-  return {
-    ok: false,
-    updatedAt: "",
-    refreshSeconds: 300,
-    expectedSensors: sensorRegistry.length,
-    sensorsOnline: 0,
-    kpis: { temperatureAvg: null, temperatureMin: null, temperatureMax: null, humidityAvg: null, co2Avg: null, activeAlarms: 0 },
-    alarms: [],
-    sensors: sensorRegistry,
-  };
-}
-
-function emptyHistory(): HistoryPayload {
-  return { ok: false, count: 0, records: [] };
-}
-
-function normalizeSettings(payload: any): AlarmSettings {
-  const source = payload?.settings || payload || {};
-  return {
-    temperature_low: Number(source.temperature_low ?? DEFAULT_ALARM_SETTINGS.temperature_low),
-    temperature_high: Number(source.temperature_high ?? DEFAULT_ALARM_SETTINGS.temperature_high),
-    humidity_low: Number(source.humidity_low ?? DEFAULT_ALARM_SETTINGS.humidity_low),
-    humidity_high: Number(source.humidity_high ?? DEFAULT_ALARM_SETTINGS.humidity_high),
-    co2_low: DEFAULT_ALARM_SETTINGS.co2_low,
-    co2_high: Number(source.co2_high ?? DEFAULT_ALARM_SETTINGS.co2_high),
-  };
-}
-
-function buildAlarmsFromSensors(sensors: Sensor[], settings: AlarmSettings) {
-  const alarms: any[] = [];
-  sensors.forEach((s) => {
-    const push = (type: string, value: number | null, unit: string, limit: number) => {
-      if (typeof value !== "number") return;
-      alarms.push({ sensor_id: s.sensor_id, sensor_name: s.sensor_name, area: s.area, type, severity: "warning", value, unit, limit, timestamp: s.timestamp });
-    };
-    if (typeof s.temperature === "number") {
-      if (s.temperature < settings.temperature_low) push("temperature_low", s.temperature, "°C", settings.temperature_low);
-      if (s.temperature > settings.temperature_high) push("temperature_high", s.temperature, "°C", settings.temperature_high);
-    }
-    if (typeof s.humidity === "number") {
-      if (s.humidity < settings.humidity_low) push("humidity_low", s.humidity, "%", settings.humidity_low);
-      if (s.humidity > settings.humidity_high) push("humidity_high", s.humidity, "%", settings.humidity_high);
-    }
-    if (typeof s.co2 === "number") {
-      if (s.co2 > settings.co2_high) push("co2_high", s.co2, "ppm", settings.co2_high);
-    }
-  });
-  return alarms;
-}
-
-function applyAlarmSettings(dashboard: DashboardPayload, settings: AlarmSettings): DashboardPayload {
-  const baseSensors = dashboard.sensors?.length ? dashboard.sensors : sensorRegistry;
-  const alarms = buildAlarmsFromSensors(baseSensors, settings);
-  const sensors = baseSensors.map((sensor) => {
-    const alarm = alarms.find((a) => a.sensor_id === sensor.sensor_id || a.dev_eui === sensor.dev_eui);
-    return { ...sensor, alarm_type: alarm?.type || null, alarm_severity: alarm?.severity || null };
-  });
-  return {
-    ...dashboard,
-    sensors,
-    expectedSensors: dashboard.expectedSensors || sensorRegistry.length,
-    sensorsOnline: dashboard.sensorsOnline ?? sensors.filter((s) => !!s.timestamp).length,
-    alarms,
-    kpis: { ...dashboard.kpis, activeAlarms: alarms.length },
-  };
-}
-
-function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number | string; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
-  const reactId = useId().replace(/:/g, "");
-  const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}-${reactId}`;
-  return (
-    <ResponsiveContainer width="100%" height={34}>
-      <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.55} />
-            <stop offset="100%" stopColor={color} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        {showTooltip && data.length > 1 && (
-          <Tooltip
-            cursor={{ stroke: color, strokeWidth: 1, opacity: 0.35 }}
-            contentStyle={{ background: "#020817", border: "1px solid rgba(148,163,184,.28)", borderRadius: 10, fontSize: 11, boxShadow: "0 14px 40px rgba(0,0,0,.35)" }}
-            labelStyle={{ color: "#94a3b8" }}
-            formatter={(value: any) => [`${Number(value).toFixed(unit === "ppm" || unit === "%" ? 0 : 1)}${unit ? ` ${unit}` : ""}`, label]}
-            labelFormatter={(value) => String(value)}
-          />
-        )}
-        <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#${gid})`} isAnimationActive={false} />
-      </AreaChart>
-    </ResponsiveContainer>
-  );
-}
-
-const spark = (seed: number, n = 24) =>
-  Array.from({ length: n }, (_, i) => ({
-    x: i,
-    y: Math.sin(i / 2 + seed) * 1.2 + Math.cos(i / 3 + seed * 1.7) * 0.8 + seed,
-  }));
-
-const sensorTrend = (base: number | undefined | null, seed: number, spread: number, n = 18) =>
-  Array.from({ length: n }, (_, i) => ({
-    x: `${String(i).padStart(2, "0")}h`,
-    y: Number(((base ?? seed) + Math.sin(i / 2 + seed) * spread + Math.cos(i / 3 + seed * 1.7) * spread * 0.45).toFixed(1)),
-  }));
-
-function KpiCard({ label, value, unit, delta, deltaTone, color, seed, critical }: { label: string; value: string; unit?: string; delta?: string; deltaTone?: "up" | "down" | "warn"; color: string; seed: number; critical?: boolean }) {
-  return (
-    <div className="glass rounded-2xl p-2.5 flex flex-col gap-1 min-w-0 h-[82px]">
-      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
-      <div className="flex items-end justify-between gap-3">
-        <div className="flex items-baseline gap-1 min-w-0">
-          <span className="text-xl font-semibold tracking-tight truncate">{value}</span>
-          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
-        </div>
-        <div className="w-20 shrink-0 -mb-1 text-[10px] text-muted-foreground text-right">tempo real</div>
-      </div>
-      {delta && (
-        <div className={`text-[11px] flex items-center gap-1 ${critical ? "text-critical" : deltaTone === "up" ? "text-success" : deltaTone === "down" ? "text-info" : "text-warning"}`}>
-          {critical ? <CircleDot className="h-3 w-3" /> : <span>{deltaTone === "up" ? "↑" : "↓"}</span>}
-          <span>{delta}</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
-  return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm transition-all ${active ? "bg-gradient-to-r from-primary/30 to-primary/5 text-white border border-primary/40 shadow-[0_0_20px_-6px_oklch(0.70_0.18_250/0.6)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"}`}>
-      <Icon className="h-4 w-4 shrink-0" />
-      <span className="truncate">{label}</span>
-    </button>
-  );
-}
-
-function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Layer; onClick?: () => void }) {
-  const disabledLayer = layer === "co2" && isEm300Sensor(sensor);
-  const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
-  const secondary = layer === "temperature" ? sensor.humidity : layer === "humidity" ? sensor.temperature : sensor.humidity;
-  const tone = disabledLayer || mainValue === null ? "neutral" : toneForSensor(sensor, layer);
-  const toneStyle = pinTone[tone] || pinTone.neutral;
-  const shortId = sensor.sensor_id.replace("AM103L-", "A").replace("EM300-", "E");
-
-  return (
-    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-center outline-none">
-      <span
-        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl opacity-60 transition-opacity group-hover:opacity-90"
-        style={{ background: toneStyle.glow }}
-      />
-      <div className={`relative min-w-[46px] rounded-2xl border ${toneStyle.ring} bg-gradient-to-br ${toneStyle.fill} px-2.5 py-1.5 shadow-[0_14px_34px_rgba(0,0,0,.38)] ring-1 ring-white/15 transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-105`}>
-        <div className={`leading-none ${toneStyle.text}`}>
-          <div className="text-[12px] font-black tracking-tight tabular-nums">{disabledLayer ? "--" : markerValueText(sensor, layer)}</div>
-          {markerUnitText(layer) && <div className="mt-0.5 text-[7px] font-bold uppercase opacity-80">{markerUnitText(layer)}</div>}
-        </div>
-        <div className="mt-1 border-t border-white/20 pt-0.5 text-[8px] font-black tracking-wide text-white drop-shadow-sm">{shortId}</div>
-      </div>
-      <span className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-30 hidden min-w-[154px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/94 px-3 py-2 text-left text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
-        <span className="block font-semibold">{sensor.sensor_name}</span>
-        <span className="mt-1 block text-cyan-200">{disabledLayer ? "CO₂ não disponível" : layerValueText(sensor, layer)}</span>
-        {typeof secondary === "number" && <span className="block text-slate-300">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</span>}
-        <span className="mt-1 block text-[10px] text-slate-400">{sensor.area}</span>
-      </span>
-    </button>
-  );
-}
-
-function PeriodSelect({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
-  return (
-    <div className="glass rounded-2xl px-4 py-2 flex items-center gap-3">
-      <div>
-        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Período</div>
-        <select value={value} onChange={(e) => onChange(e.target.value as Period)} className="bg-transparent text-sm font-medium outline-none cursor-pointer">
-          <option value="today" className="bg-slate-900">Hoje</option>
-          <option value="week" className="bg-slate-900">Semana</option>
-          <option value="month" className="bg-slate-900">Mês</option>
-        </select>
-      </div>
-    </div>
   );
 }
 
@@ -1274,7 +744,7 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[75%] max-w-[1080px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
+          <div className="absolute left-1/2 top-1/2 w-[68%] max-w-[980px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1536} height={1024} />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
