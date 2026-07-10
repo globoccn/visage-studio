@@ -204,6 +204,21 @@ function saveStoredAuth(auth: AuthState | null) {
   else window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
 }
 
+async function parseResponseJSON<T>(res: Response, context: string): Promise<T> {
+  const text = await res.text();
+  if (!text.trim()) {
+    if (context.includes("/fleury-history")) return { ok: true, count: 0, records: [] } as T;
+    if (context.includes("/fleury-dashboard-latest")) return { ok: true, sensors: [], alarms: [], kpis: {}, expectedSensors: sensorRegistry.length, sensorsOnline: 0 } as T;
+    if (context.includes("/fleury-settings")) return { ok: true, settings: DEFAULT_ALARM_SETTINGS } as T;
+    throw new Error(`${context}: resposta vazia`);
+  }
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    throw new Error(`${context}: resposta não é JSON válido`);
+  }
+}
+
 async function fetchAuthJSON<T>(url: string, token?: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers || {});
   if (!headers.has("Content-Type") && init?.body) headers.set("Content-Type", "application/json");
