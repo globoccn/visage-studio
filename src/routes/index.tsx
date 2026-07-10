@@ -280,41 +280,32 @@ const layerConfig: Record<Layer, { label: string; unit: string; icon: any; stops
 };
 
 const sensorRegistry: Sensor[] = [
-  { dev_eui: "24E124136E312780", sensor_id: "EM300-01", sensor_name: "EM300-01", area: "Recepção", floor: "Térreo", x: 6, y: 35, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314787", sensor_id: "EM300-02", sensor_name: "EM300-02", area: "Espera", floor: "Térreo", x: 41, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314516", sensor_id: "EM300-03", sensor_name: "EM300-03", area: "Coleta 01", floor: "Térreo", x: 58, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314466", sensor_id: "EM300-04", sensor_name: "EM300-04", area: "Coleta 02", floor: "Térreo", x: 75, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E311869", sensor_id: "EM300-05", sensor_name: "EM300-05", area: "Triagem", floor: "Térreo", x: 88, y: 62, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E312236", sensor_id: "EM300-06", sensor_name: "EM300-06", area: "Recepção Central", floor: "Térreo", x: 68, y: 58, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F471011", sensor_id: "AM103L-07", sensor_name: "AM 103 L - 07", area: "Corredor 01", floor: "Térreo", x: 62, y: 78, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F478289", sensor_id: "AM103L-08", sensor_name: "AM 103 L - 08", area: "Consultório 01", floor: "Térreo", x: 50, y: 65, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F454786", sensor_id: "AM103L-09", sensor_name: "AM 103 L - 09", area: "Consultório 02", floor: "Térreo", x: 38, y: 60, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F454815", sensor_id: "AM103L-10", sensor_name: "AM 103 L - 10", area: "Laboratório", floor: "Térreo", x: 18, y: 78, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F478878", sensor_id: "AM103L-11", sensor_name: "AM 103 L - 11", area: "Sala Técnica", floor: "Térreo", x: 23, y: 42, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F457456", sensor_id: "AM103L-12", sensor_name: "AM 103 L - 12", area: "Administrativo", floor: "Térreo", x: 32, y: 22, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F478841", sensor_id: "AM103L-13", sensor_name: "AM 103 L - 13", area: "Sala de Exames 01", floor: "Térreo", x: 47, y: 16, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F478688", sensor_id: "AM103L-14", sensor_name: "AM 103 L - 14", area: "Sala de Exames 02", floor: "Térreo", x: 64, y: 16, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Apoio", floor: "Térreo", x: 86, y: 28, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E312780", sensor_id: "EM300-01", sensor_name: "EM300-01", area: "Área central inferior", floor: "Térreo", x: 58.2, y: 66.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314787", sensor_id: "EM300-02", sensor_name: "EM300-02", area: "Área inferior esquerda", floor: "Térreo", x: 11.8, y: 72.9, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314516", sensor_id: "EM300-03", sensor_name: "EM300-03", area: "Sala direita inferior", floor: "Térreo", x: 93.0, y: 56.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314466", sensor_id: "EM300-04", sensor_name: "EM300-04", area: "Área superior esquerda", floor: "Térreo", x: 35.0, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478289", sensor_id: "AM103L-08", sensor_name: "AM 103 L - 08", area: "Sala direita superior", floor: "Térreo", x: 90.2, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Mesa central", floor: "Térreo", x: 35.0, y: 44.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
 
+const installedSensorIds = new Set(sensorRegistry.map((sensor) => sensor.sensor_id));
+const installedSensorDevEuis = new Set(sensorRegistry.map((sensor) => sensor.dev_eui));
+
+function isInstalledSensorLike(sensor: any) {
+  const sensorId = String(sensor?.sensor_id || "");
+  const devEui = String(sensor?.dev_eui || sensor?.devEUI || sensor?.deviceEUI || "").toUpperCase();
+  return installedSensorIds.has(sensorId) || installedSensorDevEuis.has(devEui);
+}
+
 const sensorMapPositions: Record<string, { x: number; y: number }> = {
-  // Posições finais calibradas visualmente na planta horizontal Fleury.
-  // Mantêm os balões dentro da zona atendida pelo respectivo sensor.
-  "EM300-01": { x: 16.0, y: 17.8 },
-  "EM300-02": { x: 16.0, y: 26.4 },
-  "EM300-03": { x: 30.6, y: 18.5 },
-  "EM300-04": { x: 36.8, y: 24.2 },
-  "EM300-05": { x: 49.0, y: 54.0 },
-  "EM300-06": { x: 55.2, y: 74.5 },
-  "AM103L-07": { x: 64.4, y: 53.8 },
-  "AM103L-08": { x: 83.2, y: 53.8 },
-  "AM103L-09": { x: 82.0, y: 74.0 },
-  "AM103L-10": { x: 51.6, y: 27.2 },
-  "AM103L-11": { x: 68.4, y: 27.2 },
-  "AM103L-12": { x: 86.6, y: 27.2 },
-  "AM103L-13": { x: 30.2, y: 40.2 },
-  "AM103L-14": { x: 30.8, y: 56.2 },
-  "AM103L-15": { x: 30.8, y: 74.2 },
+  // Posição física real indicada pelos números na planta de referência.
+  // A posição do marcador é independente do polígono de cobertura do heatmap.
+  "EM300-01": { x: 58.2, y: 66.0 },
+  "EM300-02": { x: 11.8, y: 72.9 },
+  "EM300-03": { x: 93.0, y: 56.0 },
+  "EM300-04": { x: 35.0, y: 11.0 },
+  "AM103L-08": { x: 90.2, y: 11.0 },
+  "AM103L-15": { x: 35.0, y: 44.0 },
 };
 
 function mapPosition(sensor: Sensor) {
@@ -532,24 +523,14 @@ type HeatmapZone = {
 };
 
 const heatmapZones: HeatmapZone[] = [
-  // Polígonos finais por zona S1–S15.
-  // Coordenadas percentuais sobre floor-plan-fleury-top.png.
-  // Sem stroke no produto final: as divisões não ficam aparentes ao usuário.
-  { id: "s1_em300_01", label: "S1", sensors: ["EM300-01"], points: "7.0,13.5 20.5,13.5 20.5,22.1 7.0,22.1" },
-  { id: "s2_em300_02", label: "S2", sensors: ["EM300-02"], points: "7.0,23.5 20.5,23.5 20.5,29.6 7.0,29.6" },
-  { id: "s3_em300_03", label: "S3", sensors: ["EM300-03"], points: "22.2,13.3 39.9,13.3 39.9,18.7 32.2,18.7 31.6,29.6 22.2,29.6" },
-  { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "33.1,21.2 39.9,21.2 39.9,29.6 33.1,29.6" },
-  { id: "s5_em300_05", label: "S5", sensors: ["EM300-05"], points: "44.0,44.5 53.9,44.5 53.9,64.5 44.0,64.5" },
-  { id: "s6_em300_06", label: "S6", sensors: ["EM300-06"], points: "44.0,65.5 66.8,65.5 66.8,84.6 44.0,84.6" },
-  { id: "s7_am103l_07", label: "S7", sensors: ["AM103L-07"], points: "55.2,44.5 75.6,44.5 75.6,66.0 66.8,66.0 66.8,65.5 55.2,65.5" },
-  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "75.6,44.5 96.0,44.5 96.0,67.2 75.6,67.2" },
-  { id: "s9_am103l_09", label: "S9", sensors: ["AM103L-09"], points: "66.8,66.0 94.2,66.0 94.2,83.6 66.8,83.6" },
-  { id: "s10_am103l_10", label: "S10", sensors: ["AM103L-10"], points: "41.2,13.3 59.3,13.3 59.3,42.3 41.2,42.3" },
-  { id: "s11_am103l_11", label: "S11", sensors: ["AM103L-11"], points: "59.3,13.3 77.4,13.3 77.4,42.3 59.3,42.3" },
-  { id: "s12_am103l_12", label: "S12", sensors: ["AM103L-12"], points: "77.4,13.3 96.0,13.3 96.0,42.3 77.4,42.3" },
-  { id: "s13_am103l_13", label: "S13", sensors: ["AM103L-13"], points: "7.0,31.4 42.3,31.4 42.3,48.7 7.0,48.7" },
-  { id: "s14_am103l_14", label: "S14", sensors: ["AM103L-14"], points: "7.0,48.7 42.3,48.7 42.3,65.5 7.0,65.5" },
-  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "7.0,65.5 42.3,65.5 42.3,85.2 7.0,85.2" },
+  // Seis áreas reais de cobertura desenhadas na planta de referência.
+  // Os polígonos são independentes da posição física dos marcadores.
+  { id: "s4_em300_04", label: "S4", sensors: ["EM300-04"], points: "5.5,9.0 62.5,8.0 62.5,22.0 52.0,22.0 50.5,27.5 46.8,27.5 46.8,41.5 24.5,41.5 24.5,40.0 5.2,39.5" },
+  { id: "s15_am103l_15", label: "S15", sensors: ["AM103L-15"], points: "24.5,27.5 46.8,28.0 46.8,50.5 38.2,50.5 38.2,42.0 34.2,42.0 34.2,50.5 24.5,50.5" },
+  { id: "s2_em300_02", label: "S2", sensors: ["EM300-02"], points: "5.2,39.5 24.5,40.0 24.5,50.5 38.2,50.5 38.8,78.0 5.0,78.0" },
+  { id: "s1_em300_01", label: "S1", sensors: ["EM300-01"], points: "38.2,50.5 46.8,50.5 46.8,42.0 62.5,42.0 62.5,59.0 53.5,59.0 53.5,61.5 62.5,61.5 62.5,65.0 66.0,78.0 38.8,78.0" },
+  { id: "s8_am103l_08", label: "S8", sensors: ["AM103L-08"], points: "64.8,8.0 95.0,8.0 95.3,32.7 64.8,33.0" },
+  { id: "s3_em300_03", label: "S3", sensors: ["EM300-03"], points: "64.8,33.0 95.3,32.7 96.0,60.3 64.8,60.3" },
 ];
 
 function valuesForZone(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
@@ -587,25 +568,7 @@ function zoneCentroid(zone: HeatmapZone) {
 
 function nearestZoneValue(zone: HeatmapZone, sensors: Sensor[], layer: Layer) {
   const zoneValues = valuesForZone(zone, sensors, layer);
-  if (zoneValues.length) return average(zoneValues);
-
-  // V4.1: CO₂ não usa fallback por proximidade. Se a zona não possui
-  // sensor CO₂ próprio, ela deve permanecer neutra para não comunicar
-  // uma leitura inexistente.
-  if (layer === "co2") return null;
-
-  // Fallback visual: em temperatura/umidade, se uma zona ainda não tiver
-  // sensor válido na camada, usa o sensor válido mais próximo.
-  const valid = sensors
-    .map((sensor) => ({ sensor, value: valueForLayer(sensor, layer), pos: mapPosition(sensor) }))
-    .filter((item): item is { sensor: Sensor; value: number; pos: { x: number; y: number } } => typeof item.value === "number");
-
-  if (!valid.length) return null;
-  const center = zoneCentroid(zone);
-  const nearest = valid
-    .map((item) => ({ ...item, distance: Math.hypot(item.pos.x - center.x, item.pos.y - center.y) }))
-    .sort((a, b) => a.distance - b.distance)[0];
-  return nearest?.value ?? null;
+  return zoneValues.length ? average(zoneValues) : null;
 }
 
 function heatmapAmbient(sensors: Sensor[], layer: Layer) {
@@ -811,7 +774,7 @@ function makeMockDashboard(period: Period): DashboardPayload {
     ok: true,
     updatedAt: new Date().toISOString(),
     refreshSeconds: 300,
-    expectedSensors: 15,
+    expectedSensors: sensorRegistry.length,
     sensorsOnline: sensors.length,
     kpis: {
       temperatureAvg: temps.reduce((a, b) => a + b, 0) / temps.length,
@@ -938,7 +901,7 @@ function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null,
   const records = history?.records || [];
   if (!records.length) return sensorRegistry;
   const grouped = new Map<string, HistoryRecord[]>();
-  records.forEach((r) => grouped.set(r.dev_eui, [...(grouped.get(r.dev_eui) || []), r]));
+  records.filter(isInstalledSensorLike).forEach((r) => grouped.set(r.dev_eui, [...(grouped.get(r.dev_eui) || []), r]));
   return Array.from(grouped.entries()).map(([dev, items]) => {
     const base = sensorRegistry.find((s) => s.dev_eui === dev) || (items[0] as Sensor);
     const avg = (field: Layer) => {
@@ -1038,17 +1001,21 @@ function normalizeSensor(raw: any): Sensor {
 
 function normalizeDashboard(payload: any): DashboardPayload {
   const source = payload && typeof payload === "object" ? payload : {};
-  const sensors = Array.isArray(source.sensors) ? source.sensors.map(normalizeSensor) : sensorRegistry;
+  const sensors = Array.isArray(source.sensors)
+    ? source.sensors.filter(isInstalledSensorLike).map(normalizeSensor)
+    : sensorRegistry;
   const online = sensors.filter((sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number").length;
   const kpis = source.kpis || {};
   return {
     ok: source.ok !== false,
     updatedAt: source.updatedAt || source.updated_at || "",
     refreshSeconds: Number(source.refreshSeconds || source.refresh_seconds || 300),
-    expectedSensors: Number(source.expectedSensors || source.expected_sensors || sensorRegistry.length),
-    sensorsOnline: Number(source.sensorsOnline ?? source.sensors_online ?? online),
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline: online,
     sensors,
-    alarms: Array.isArray(source.alarms) ? source.alarms : [],
+    alarms: Array.isArray(source.alarms)
+      ? source.alarms.filter((alarm: any) => isInstalledSensorLike(alarm))
+      : [],
     kpis: {
       temperatureAvg: numberOrNull(kpis.temperatureAvg ?? kpis.temperature_avg),
       temperatureMin: numberOrNull(kpis.temperatureMin ?? kpis.temperature_min),
@@ -1070,7 +1037,8 @@ function periodStart(period: Period) {
 
 function normalizeHistory(payload: any, period: Period): HistoryPayload {
   const source = payload && typeof payload === "object" ? payload : {};
-  const rawRecords = Array.isArray(payload) ? payload : Array.isArray(source.records) ? source.records : Array.isArray(source.data) ? source.data : Array.isArray(source.history) ? source.history : [];
+  const rawRecords = (Array.isArray(payload) ? payload : Array.isArray(source.records) ? source.records : Array.isArray(source.data) ? source.data : Array.isArray(source.history) ? source.history : [])
+    .filter(isInstalledSensorLike);
   const start = periodStart(period).getTime();
   const records = rawRecords
     .map((record: any) => ({ ...normalizeSensor(record), reading_time: record?.reading_time || record?.timestamp }))
@@ -1378,7 +1346,7 @@ function SensorTrendCard({ title, dataKey, data, color, unit }: { title: string;
 }
 
 function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; history: HistoryPayload | null; period: Period }) {
-  const s = sensor || sensorRegistry[5];
+  const s = sensor || sensorRegistry[0];
   const isAlert = !!s.alarm_type;
   const em300 = isEm300Sensor(s);
   const series = buildSensorDetailSeries(history, s, period);
@@ -1445,7 +1413,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
       </section>
       <section className="dashboard-main-grid grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_320px] gap-2.5 flex-1 min-h-0">
         <DigitalTwinMap sensors={heatmapSensors} layer={layer} period={period} onLayerChange={setLayer} onSelectSensor={setSelectedSensor} />
-        <SensorDetail sensor={selectedSensor || heatmapSensors[5]} history={history} period={period} />
+        <SensorDetail sensor={selectedSensor || heatmapSensors[0]} history={history} period={period} />
       </section>
       <ChartsAndInsights series={series} dashboard={data} period={period} onNavigate={onNavigate} />
       <RecentAlerts alarms={data.alarms} onNavigate={onNavigate} />
