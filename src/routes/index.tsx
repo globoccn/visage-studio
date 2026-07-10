@@ -994,11 +994,20 @@ function LoginPage({ onLogin }: { onLogin: (auth: AuthState) => void }) {
     setStatus("");
     setLoading(true);
     try {
-      const payload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-login`, undefined, {
+      const rawPayload = await fetchAuthJSON<any>(`${N8N_BASE}/fleury-login`, undefined, {
         method: "POST",
         body: JSON.stringify({ username: username.trim(), password }),
       });
-      if (payload?.ok === false) throw new Error(payload?.error || "Credenciais inválidas");
+
+      // O n8n pode responder tanto com um objeto quanto com um array contendo
+      // o primeiro item do workflow. Normalizamos os dois formatos antes de
+      // ler token, usuário e expiração.
+      const payload = Array.isArray(rawPayload) ? rawPayload[0] : rawPayload;
+
+      if (!payload || payload?.ok === false) {
+        throw new Error(payload?.error || "Credenciais inválidas");
+      }
+
       const token = payload?.token || payload?.session?.token || payload?.access_token;
       const user = normalizeAuthUser(payload?.user || payload?.data?.user || payload);
       if (!token) throw new Error("Token ausente na resposta do login");
