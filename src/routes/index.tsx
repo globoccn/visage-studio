@@ -303,12 +303,13 @@ const sensorRegistry: Sensor[] = [
   { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Mesa central", floor: "Térreo", x: 35.0, y: 44.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
 
-const installedSensorIds = new Set(sensorRegistry.map((sensor) => sensor.sensor_id));
-const installedSensorDevEuis = new Set(sensorRegistry.map((sensor) => sensor.dev_eui));
+const installedSensorIds = new Set(sensorRegistry.map((sensor) => sensor.sensor_id.toUpperCase()));
+const installedSensorDevEuis = new Set(sensorRegistry.map((sensor) => sensor.dev_eui.toUpperCase()));
 
 function isInstalledSensorLike(sensor: any) {
-  const sensorId = String(sensor?.sensor_id || "");
-  const devEui = String(sensor?.dev_eui || sensor?.devEUI || sensor?.deviceEUI || "").toUpperCase();
+  const source = sensor?.json && typeof sensor.json === "object" ? sensor.json : sensor;
+  const sensorId = String(source?.sensor_id || source?.sensorId || "").trim().toUpperCase();
+  const devEui = String(source?.dev_eui || source?.devEUI || source?.deviceEUI || "").trim().toUpperCase();
   return installedSensorIds.has(sensorId) || installedSensorDevEuis.has(devEui);
 }
 
@@ -719,6 +720,581 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
   );
 }
 
+function layerValueText(sensor: Sensor, layer: Layer) {
+  const value = valueForLayer(sensor, layer);
+  if (value === null) return "--";
+  return layer === "co2" ? `${formatInt(value)} ppm` : `${formatDecimal(value, 1)} ${layerConfig[layer].unit}`;
+}
+
+function markerValueText(sensor: Sensor, layer: Layer) {
+  const value = valueForLayer(sensor, layer);
+  if (value === null) return "--";
+  if (layer === "co2") return `${formatInt(value)}`;
+  if (layer === "humidity") return `${formatDecimal(value, 0)}%`;
+  return `${formatDecimal(value, 1)}°`;
+}
+
+function markerUnitText(layer: Layer) {
+  return layer === "co2" ? "ppm" : "";
+}
+
+function formatDecimal(value: number | null | undefined, digits = 1) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "--";
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function formatInt(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) return "--";
+  return Math.round(value).toLocaleString("pt-BR");
+}
+
+function makeMockDashboard(period: Period): DashboardPayload {
+  const factor = period === "today" ? 0 : period === "week" ? -0.2 : -0.4;
+  const sensors = sensorRegistry.map((s, i) => ({
+    ...s,
+    timestamp: new Date(Date.now() - (i % 4) * 60_000).toISOString(),
+    temperature: typeof s.temperature === "number" ? +(s.temperature + factor + Math.sin(i) * 0.12).toFixed(1) : null,
+    humidity: typeof s.humidity === "number" ? +(s.humidity + Math.cos(i) * 0.4).toFixed(1) : null,
+    co2: typeof s.co2 === "number" ? Math.round(s.co2 + Math.sin(i / 2) * 20) : null,
+  }));
+  const temps = sensors.map((s) => s.temperature).filter((v): v is number => typeof v === "number");
+  const hums = sensors.map((s) => s.humidity).filter((v): v is number => typeof v === "number");
+  const co2s = sensors.map((s) => s.co2).filter((v): v is number => typeof v === "number");
+  const alarms = sensors.filter((s) => typeof s.temperature === "number" && (s.temperature < 21.5 || s.temperature > 25)).map((s) => ({
+    sensor_id: s.sensor_id,
+    sensor_name: s.sensor_name,
+    area: s.area,
+    type: s.temperature! < 21.5 ? "temperature_low" : "temperature_high",
+    severity: "warning",
+    value: s.temperature,
+    timestamp: s.timestamp,
+  }));
+  return {
+    ok: true,
+    updatedAt: new Date().toISOString(),
+    refreshSeconds: 300,
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline: sensors.length,
+    kpis: {
+      temperatureAvg: temps.reduce((a, b) => a + b, 0) / temps.length,
+      temperatureMin: Math.min(...temps),
+      temperatureMax: Math.max(...temps),
+      humidityAvg: hums.reduce((a, b) => a + b, 0) / hums.length,
+      co2Avg: co2s.reduce((a, b) => a + b, 0) / co2s.length,
+      activeAlarms: alarms.length,
+    },
+    alarms,
+    sensors,
+  };
+}
+
+function makeMockHistory(period: Period): HistoryPayload {
+  const points = period === "today" ? 24 : period === "week" ? 7 : 30;
+  const records: HistoryRecord[] = [];
+  for (let i = 0; i < points; i++) {
+    sensorRegistry.forEach((s, idx) => {
+      const d = new Date();
+      if (period === "today") d.setHours(i, 0, 0, 0);
+      else d.setDate(d.getDate() - (points - 1 - i));
+      records.push({
+        ...s,
+        reading_time: d.toISOString(),
+        temperature: +(22.8 + Math.sin(i / 2 + idx / 3) * 1.2 + (idx === 5 ? 1.5 : 0)).toFixed(1),
+        humidity: +(48 + Math.cos(i / 3 + idx / 5) * 4).toFixed(1),
+        co2: Math.round(610 + Math.sin(i / 2.5 + idx / 4) * 90 + (idx === 5 ? 120 : 0)),
+      });
+    });
+  }
+  return { ok: true, count: records.length, records };
+}
+
+function buildChartSeries(history: HistoryPayload | null, period: Period) {
+  const records = history?.records || [];
+  const groups = new Map<string, HistoryRecord[]>();
+  records.forEach((r) => {
+    const dt = new Date(r.reading_time || r.timestamp || Date.now());
+    const key = period === "today" ? `${String(dt.getHours()).padStart(2, "0")}:00` : `${String(dt.getDate()).padStart(2, "0")}/${String(dt.getMonth() + 1).padStart(2, "0")}`;
+    groups.set(key, [...(groups.get(key) || []), r]);
+  });
+  return Array.from(groups.entries()).map(([t, items]) => {
+    const avg = (field: Layer) => {
+      const values = items.map((i) => i[field]).filter((v): v is number => typeof v === "number");
+      return values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    };
+    const temps = items.map((i) => i.temperature).filter((v): v is number => typeof v === "number");
+    return {
+      t,
+      temp: +avg("temperature").toFixed(1),
+      h: +avg("humidity").toFixed(1),
+      c: Math.round(avg("co2")),
+      min: temps.length ? Math.min(...temps) : 0,
+      max: temps.length ? Math.max(...temps) : 0,
+    };
+  });
+}
+
+
+function buildSensorTrendFromHistory(history: HistoryPayload | null, sensor: Sensor, field: Layer, fallbackSpread: number, seed: number) {
+  const records = (history?.records || [])
+    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
+    .slice(-24);
+
+  if (!records.length) return [];
+
+  return records.map((r, i) => {
+    const dt = new Date(r.reading_time || r.timestamp || Date.now());
+    const value = r[field];
+    return {
+      x: `${String(dt.getHours()).padStart(2, "0")}h`,
+      y: Number((typeof value === "number" ? value : sensor[field] ?? 0).toFixed(field === "co2" ? 0 : 1)),
+    };
+  });
+}
+
+
+function buildSensorDetailSeries(history: HistoryPayload | null, sensor: Sensor, period: Period) {
+  const records = (history?.records || [])
+    .filter((r) => r.dev_eui === sensor.dev_eui || r.sensor_id === sensor.sensor_id)
+    .sort((a, b) => new Date(a.reading_time || a.timestamp || 0).getTime() - new Date(b.reading_time || b.timestamp || 0).getTime())
+    .slice(period === "today" ? -48 : -80);
+
+  const source = records.length
+    ? records
+    : [{ ...sensor, reading_time: sensor.timestamp || new Date().toISOString() } as HistoryRecord];
+
+  return source.map((r) => {
+    const dt = new Date(r.reading_time || r.timestamp || Date.now());
+    return {
+      t: period === "today" ? formatTimePt(dt) : formatDatePt(dt),
+      temp: typeof r.temperature === "number" ? Number(r.temperature.toFixed(1)) : null,
+      h: typeof r.humidity === "number" ? Number(r.humidity.toFixed(1)) : null,
+      c: typeof r.co2 === "number" ? Math.round(r.co2) : null,
+    };
+  });
+}
+
+function calculateDailySensorStats(sensors: Sensor[], history: HistoryPayload | null) {
+  const baseRecords = history?.records || [];
+  const today = new Date().toISOString().slice(0, 10);
+  const records = baseRecords.filter((r) => {
+    const t = r.reading_time || r.timestamp;
+    return !t || t.slice(0, 10) === today;
+  });
+  const source = records.length ? records : sensors;
+  const nums = (field: Layer) => source.map((s) => s[field]).filter((v): v is number => typeof v === "number");
+  const avg = (arr: number[]) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+  const temps = nums("temperature");
+  const hums = nums("humidity");
+  const co2s = nums("co2");
+  return {
+    temperatureAvg: avg(temps),
+    temperatureMin: temps.length ? Math.min(...temps) : null,
+    temperatureMax: temps.length ? Math.max(...temps) : null,
+    humidityAvg: avg(hums),
+    co2Avg: avg(co2s),
+  };
+}
+
+function buildHeatmapSensors(period: Period, dashboard: DashboardPayload | null, history: HistoryPayload | null): Sensor[] {
+  if (period === "today" && dashboard?.sensors?.length) {
+    const current = dashboard.sensors.filter(isInstalledSensorLike);
+    return sensorRegistry.map((base) => {
+      const sensor = current.find((item) => item.sensor_id === base.sensor_id || item.dev_eui === base.dev_eui);
+      return sensor ? { ...base, ...sensor, area: base.area, floor: base.floor, x: base.x, y: base.y } : { ...base };
+    });
+  }
+
+  const records = (history?.records || []).filter(isInstalledSensorLike);
+  if (!records.length) return sensorRegistry.map((sensor) => ({ ...sensor }));
+
+  return sensorRegistry.map((base) => {
+    const items = records
+      .filter((record) => record.sensor_id === base.sensor_id || record.dev_eui === base.dev_eui)
+      .sort((a, b) => new Date(a.reading_time || a.timestamp || 0).getTime() - new Date(b.reading_time || b.timestamp || 0).getTime());
+    if (!items.length) return { ...base };
+    const averageField = (field: Layer) => {
+      const fieldValues = items.map((item) => item[field]).filter((value): value is number => typeof value === "number");
+      return fieldValues.length ? fieldValues.reduce((sum, value) => sum + value, 0) / fieldValues.length : null;
+    };
+    const latest = items.at(-1);
+    return {
+      ...base,
+      temperature: averageField("temperature"),
+      humidity: averageField("humidity"),
+      co2: isEm300Sensor(base) ? null : averageField("co2"),
+      battery: latest?.battery ?? null,
+      rssi: latest?.rssi ?? null,
+      snr: latest?.snr ?? null,
+      timestamp: latest?.reading_time || latest?.timestamp,
+    };
+  });
+}
+
+function isValidDate(date: Date) {
+  return date instanceof Date && !Number.isNaN(date.getTime());
+}
+
+function formatDatePt(value: Date | string | null | undefined) {
+  if (!value) return "--";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValidDate(date)) return "--";
+  return date.toLocaleDateString("pt-BR");
+}
+
+function formatTimePt(value: Date | string | null | undefined) {
+  if (!value) return "--";
+  const date = value instanceof Date ? value : new Date(value);
+  if (!isValidDate(date)) return "--";
+  return date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function communicationStatus(sensor: Sensor | null | undefined) {
+  const timestamp = sensor?.timestamp;
+  if (!timestamp) return { label: "Sem leitura", className: "text-muted-foreground" };
+  const date = new Date(timestamp);
+  if (!isValidDate(date)) return { label: "Sem leitura", className: "text-muted-foreground" };
+  const ageMinutes = (Date.now() - date.getTime()) / 60000;
+  if (ageMinutes <= 15) return { label: "Online", className: "text-success" };
+  if (ageMinutes <= 30) return { label: "Atenção", className: "text-warning" };
+  return { label: "Offline", className: "text-critical" };
+}
+
+async function fetchJSON<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await parseResponseJSON<T>(res, url);
+}
+
+
+function numberOrNull(value: any): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function normalizeSensor(raw: any): Sensor {
+  const source = raw?.json && typeof raw.json === "object" ? raw.json : raw || {};
+  const rawSensorId = String(source?.sensor_id || source?.sensorId || "").trim().toUpperCase();
+  const rawDevEui = String(source?.dev_eui || source?.devEUI || source?.deviceEUI || "").trim().toUpperCase();
+  const base = sensorRegistry.find(
+    (sensor) => sensor.sensor_id.toUpperCase() === rawSensorId || sensor.dev_eui.toUpperCase() === rawDevEui,
+  );
+  const sensorId = base?.sensor_id || rawSensorId || rawDevEui;
+  const model = source?.model || base?.model || (sensorId.includes("EM300") ? "EM300-TH" : "AM103L");
+  const em300 = String(model).toUpperCase().includes("EM300") || sensorId.includes("EM300");
+
+  return {
+    ...(base || sensorRegistry[0]),
+    dev_eui: base?.dev_eui || rawDevEui,
+    sensor_id: sensorId,
+    sensor_name: base?.sensor_name || source?.sensor_name || source?.sensorName || sensorId,
+    model,
+    area: base?.area || source?.area || "Sem cadastro",
+    floor: base?.floor || source?.floor || "Térreo",
+    x: numberOrNull(base?.x ?? source?.x),
+    y: numberOrNull(base?.y ?? source?.y),
+    temperature: numberOrNull(source?.temperature),
+    humidity: numberOrNull(source?.humidity),
+    co2: em300 ? null : numberOrNull(source?.co2),
+    battery: numberOrNull(source?.battery),
+    rssi: numberOrNull(source?.rssi),
+    snr: numberOrNull(source?.snr),
+    temperature_status: source?.temperature_status,
+    timestamp: source?.timestamp || source?.reading_time || source?.received_at || base?.timestamp,
+    alarm_type: source?.alarm_type || null,
+    alarm_severity: source?.alarm_severity || null,
+  };
+}
+
+function normalizeDashboard(payload: any): DashboardPayload {
+  const unwrapped = Array.isArray(payload) && payload.length === 1 && payload[0] && typeof payload[0] === "object"
+    ? payload[0]
+    : payload;
+  const source = unwrapped && typeof unwrapped === "object" ? unwrapped : {};
+  const rawSensors = Array.isArray(source.sensors) ? source.sensors : [];
+  const installedReadings = rawSensors
+    .map((sensor: any) => (sensor?.json && typeof sensor.json === "object" ? sensor.json : sensor))
+    .filter(isInstalledSensorLike);
+
+  const sensors = sensorRegistry.map((base) => {
+    const reading = installedReadings.find((item: any) => {
+      const sensorId = String(item?.sensor_id || item?.sensorId || "").trim().toUpperCase();
+      const devEui = String(item?.dev_eui || item?.devEUI || item?.deviceEUI || "").trim().toUpperCase();
+      return sensorId === base.sensor_id.toUpperCase() || devEui === base.dev_eui.toUpperCase();
+    });
+    return reading ? normalizeSensor(reading) : { ...base };
+  });
+
+  const values = (field: Layer) => sensors.map((sensor) => sensor[field]).filter((value): value is number => typeof value === "number");
+  const averageValue = (items: number[]) => items.length ? items.reduce((sum, value) => sum + value, 0) / items.length : null;
+  const temperatures = values("temperature");
+  const humidities = values("humidity");
+  const co2Values = sensors.filter((sensor) => !isEm300Sensor(sensor)).map((sensor) => sensor.co2).filter((value): value is number => typeof value === "number");
+  const alarms = Array.isArray(source.alarms) ? source.alarms.filter(isInstalledSensorLike) : [];
+  const online = sensors.filter(
+    (sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number",
+  ).length;
+
+  return {
+    ok: source.ok !== false,
+    updatedAt: source.updatedAt || source.updated_at || "",
+    refreshSeconds: Number(source.refreshSeconds || source.refresh_seconds || 300),
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline: online,
+    sensors,
+    alarms,
+    kpis: {
+      temperatureAvg: averageValue(temperatures),
+      temperatureMin: temperatures.length ? Math.min(...temperatures) : null,
+      temperatureMax: temperatures.length ? Math.max(...temperatures) : null,
+      humidityAvg: averageValue(humidities),
+      co2Avg: averageValue(co2Values),
+      activeAlarms: alarms.length,
+    },
+  };
+}
+
+function periodStart(period: Period) {
+  const start = new Date();
+  if (period === "today") start.setHours(0, 0, 0, 0);
+  else if (period === "week") start.setDate(start.getDate() - 7);
+  else start.setDate(start.getDate() - 30);
+  return start;
+}
+
+function normalizeHistory(payload: any, period: Period): HistoryPayload {
+  const unwrapped = Array.isArray(payload)
+    && payload.length === 1
+    && payload[0]
+    && typeof payload[0] === "object"
+    && (Array.isArray(payload[0].records) || Array.isArray(payload[0].data) || Array.isArray(payload[0].history))
+      ? payload[0]
+      : payload;
+  const source = unwrapped && typeof unwrapped === "object" ? unwrapped : {};
+  const rawRecords = Array.isArray(unwrapped)
+    ? unwrapped
+    : Array.isArray(source.records)
+      ? source.records
+      : Array.isArray(source.data)
+        ? source.data
+        : Array.isArray(source.history)
+          ? source.history
+          : [];
+  const start = periodStart(period).getTime();
+  const records = rawRecords
+    .map((record: any) => (record?.json && typeof record.json === "object" ? record.json : record))
+    .filter(isInstalledSensorLike)
+    .map((record: any) => ({ ...normalizeSensor(record), reading_time: record?.reading_time || record?.timestamp }))
+    .filter((record: HistoryRecord) => {
+      const time = record.reading_time || record.timestamp;
+      if (!time) return false;
+      const timestamp = new Date(time).getTime();
+      return Number.isFinite(timestamp) && timestamp >= start;
+    });
+  return { ok: source.ok !== false, count: records.length, summary: source.summary, insights: source.insights, records };
+}
+
+function emptyDashboard(): DashboardPayload {
+  return {
+    ok: false,
+    updatedAt: "",
+    refreshSeconds: 300,
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline: 0,
+    kpis: { temperatureAvg: null, temperatureMin: null, temperatureMax: null, humidityAvg: null, co2Avg: null, activeAlarms: 0 },
+    alarms: [],
+    sensors: sensorRegistry,
+  };
+}
+
+function emptyHistory(): HistoryPayload {
+  return { ok: false, count: 0, records: [] };
+}
+
+function normalizeSettings(payload: any): AlarmSettings {
+  const unwrapped = Array.isArray(payload) && payload.length === 1 ? payload[0] : payload;
+  const source = unwrapped?.settings || unwrapped || {};
+  return {
+    temperature_low: Number(source.temperature_low ?? DEFAULT_ALARM_SETTINGS.temperature_low),
+    temperature_high: Number(source.temperature_high ?? DEFAULT_ALARM_SETTINGS.temperature_high),
+    humidity_low: Number(source.humidity_low ?? DEFAULT_ALARM_SETTINGS.humidity_low),
+    humidity_high: Number(source.humidity_high ?? DEFAULT_ALARM_SETTINGS.humidity_high),
+    co2_low: DEFAULT_ALARM_SETTINGS.co2_low,
+    co2_high: Number(source.co2_high ?? DEFAULT_ALARM_SETTINGS.co2_high),
+  };
+}
+
+function buildAlarmsFromSensors(sensors: Sensor[], settings: AlarmSettings) {
+  const alarms: any[] = [];
+  sensors.filter(isInstalledSensorLike).forEach((sensor) => {
+    const push = (type: string, value: number | null, unit: string, limit: number) => {
+      if (typeof value !== "number") return;
+      alarms.push({
+        sensor_id: sensor.sensor_id,
+        sensor_name: sensor.sensor_name,
+        area: sensor.area,
+        type,
+        severity: "warning",
+        value,
+        unit,
+        limit,
+        timestamp: sensor.timestamp,
+      });
+    };
+    if (typeof sensor.temperature === "number") {
+      if (sensor.temperature < settings.temperature_low) push("temperature_low", sensor.temperature, "°C", settings.temperature_low);
+      if (sensor.temperature > settings.temperature_high) push("temperature_high", sensor.temperature, "°C", settings.temperature_high);
+    }
+    if (typeof sensor.humidity === "number") {
+      if (sensor.humidity < settings.humidity_low) push("humidity_low", sensor.humidity, "%", settings.humidity_low);
+      if (sensor.humidity > settings.humidity_high) push("humidity_high", sensor.humidity, "%", settings.humidity_high);
+    }
+    if (!isEm300Sensor(sensor) && typeof sensor.co2 === "number" && sensor.co2 > settings.co2_high) {
+      push("co2_high", sensor.co2, "ppm", settings.co2_high);
+    }
+  });
+  return alarms;
+}
+
+function applyAlarmSettings(dashboard: DashboardPayload, settings: AlarmSettings): DashboardPayload {
+  const current = (dashboard.sensors?.length ? dashboard.sensors : sensorRegistry).filter(isInstalledSensorLike);
+  const baseSensors = sensorRegistry.map((base) => {
+    const sensor = current.find((item) => item.sensor_id === base.sensor_id || item.dev_eui === base.dev_eui);
+    return sensor ? { ...base, ...sensor, area: base.area, floor: base.floor, x: base.x, y: base.y } : { ...base };
+  });
+  const alarms = buildAlarmsFromSensors(baseSensors, settings);
+  const sensors = baseSensors.map((sensor) => {
+    const alarm = alarms.find((item) => item.sensor_id === sensor.sensor_id);
+    return { ...sensor, alarm_type: alarm?.type || null, alarm_severity: alarm?.severity || null };
+  });
+  const sensorsOnline = sensors.filter(
+    (sensor) => !!sensor.timestamp || typeof sensor.temperature === "number" || typeof sensor.humidity === "number" || typeof sensor.co2 === "number",
+  ).length;
+  return {
+    ...dashboard,
+    sensors,
+    expectedSensors: sensorRegistry.length,
+    sensorsOnline,
+    alarms,
+    kpis: { ...dashboard.kpis, activeAlarms: alarms.length },
+  };
+}
+
+function Sparkline({ data, color, unit = "", label = "Valor", showTooltip = true }: { data: { x: number | string; y: number }[]; color: string; unit?: string; label?: string; showTooltip?: boolean }) {
+  const reactId = useId().replace(/:/g, "");
+  const gid = `g-${color.replace(/[^a-zA-Z0-9]/g, "")}-${reactId}`;
+  return (
+    <ResponsiveContainer width="100%" height={34}>
+      <AreaChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.55} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
+          </linearGradient>
+        </defs>
+        {showTooltip && data.length > 1 && (
+          <Tooltip
+            cursor={{ stroke: color, strokeWidth: 1, opacity: 0.35 }}
+            contentStyle={{ background: "#020817", border: "1px solid rgba(148,163,184,.28)", borderRadius: 10, fontSize: 11, boxShadow: "0 14px 40px rgba(0,0,0,.35)" }}
+            labelStyle={{ color: "#94a3b8" }}
+            formatter={(value: any) => [`${Number(value).toFixed(unit === "ppm" || unit === "%" ? 0 : 1)}${unit ? ` ${unit}` : ""}`, label]}
+            labelFormatter={(value) => String(value)}
+          />
+        )}
+        <Area type="monotone" dataKey="y" stroke={color} strokeWidth={1.6} fill={`url(#${gid})`} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  );
+}
+
+const spark = (seed: number, n = 24) =>
+  Array.from({ length: n }, (_, i) => ({
+    x: i,
+    y: Math.sin(i / 2 + seed) * 1.2 + Math.cos(i / 3 + seed * 1.7) * 0.8 + seed,
+  }));
+
+const sensorTrend = (base: number | undefined | null, seed: number, spread: number, n = 18) =>
+  Array.from({ length: n }, (_, i) => ({
+    x: `${String(i).padStart(2, "0")}h`,
+    y: Number(((base ?? seed) + Math.sin(i / 2 + seed) * spread + Math.cos(i / 3 + seed * 1.7) * spread * 0.45).toFixed(1)),
+  }));
+
+function KpiCard({ label, value, unit, delta, deltaTone, color, seed, critical }: { label: string; value: string; unit?: string; delta?: string; deltaTone?: "up" | "down" | "warn"; color: string; seed: number; critical?: boolean }) {
+  return (
+    <div className="glass rounded-2xl p-2.5 flex flex-col gap-1 min-w-0 h-[82px]">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="flex items-baseline gap-1 min-w-0">
+          <span className="text-xl font-semibold tracking-tight truncate">{value}</span>
+          {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
+        </div>
+        <div className="w-20 shrink-0 -mb-1 text-[10px] text-muted-foreground text-right">tempo real</div>
+      </div>
+      {delta && (
+        <div className={`text-[11px] flex items-center gap-1 ${critical ? "text-critical" : deltaTone === "up" ? "text-success" : deltaTone === "down" ? "text-info" : "text-warning"}`}>
+          {critical ? <CircleDot className="h-3 w-3" /> : <span>{deltaTone === "up" ? "↑" : "↓"}</span>}
+          <span>{delta}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm transition-all ${active ? "bg-gradient-to-r from-primary/30 to-primary/5 text-white border border-primary/40 shadow-[0_0_20px_-6px_oklch(0.70_0.18_250/0.6)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"}`}>
+      <Icon className="h-4 w-4 shrink-0" />
+      <span className="truncate">{label}</span>
+    </button>
+  );
+}
+
+function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Layer; onClick?: () => void }) {
+  const disabledLayer = layer === "co2" && isEm300Sensor(sensor);
+  const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
+  const secondary = layer === "temperature" ? sensor.humidity : layer === "humidity" ? sensor.temperature : sensor.humidity;
+  const tone = disabledLayer || mainValue === null ? "neutral" : toneForSensor(sensor, layer);
+  const toneStyle = pinTone[tone] || pinTone.neutral;
+  const shortId = sensor.sensor_id.replace("AM103L-", "A").replace("EM300-", "E");
+
+  return (
+    <button onClick={onClick} className="relative -translate-x-1/2 -translate-y-1/2 group text-center outline-none">
+      <span
+        className="absolute left-1/2 top-1/2 h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full blur-xl opacity-60 transition-opacity group-hover:opacity-90"
+        style={{ background: toneStyle.glow }}
+      />
+      <div className={`relative min-w-[46px] rounded-2xl border ${toneStyle.ring} bg-gradient-to-br ${toneStyle.fill} px-2.5 py-1.5 shadow-[0_14px_34px_rgba(0,0,0,.38)] ring-1 ring-white/15 transition-all duration-300 group-hover:-translate-y-1 group-hover:scale-105`}>
+        <div className={`leading-none ${toneStyle.text}`}>
+          <div className="text-[12px] font-black tracking-tight tabular-nums">{disabledLayer ? "--" : markerValueText(sensor, layer)}</div>
+          {markerUnitText(layer) && <div className="mt-0.5 text-[7px] font-bold uppercase opacity-80">{markerUnitText(layer)}</div>}
+        </div>
+        <div className="mt-1 border-t border-white/20 pt-0.5 text-[8px] font-black tracking-wide text-white drop-shadow-sm">{shortId}</div>
+      </div>
+      <span className="pointer-events-none absolute left-1/2 top-[calc(100%+10px)] z-30 hidden min-w-[154px] -translate-x-1/2 rounded-xl border border-cyan-300/25 bg-slate-950/94 px-3 py-2 text-left text-xs text-white shadow-2xl backdrop-blur-md group-hover:block">
+        <span className="block font-semibold">{sensor.sensor_name}</span>
+        <span className="mt-1 block text-cyan-200">{disabledLayer ? "CO₂ não disponível" : layerValueText(sensor, layer)}</span>
+        {typeof secondary === "number" && <span className="block text-slate-300">{layer === "humidity" ? `${formatDecimal(secondary, 1)} °C` : `${formatDecimal(secondary, 0)}%`}</span>}
+        <span className="mt-1 block text-[10px] text-slate-400">{sensor.area}</span>
+      </span>
+    </button>
+  );
+}
+
+function PeriodSelect({ value, onChange }: { value: Period; onChange: (p: Period) => void }) {
+  return (
+    <div className="glass rounded-2xl px-4 py-2 flex items-center gap-3">
+      <div>
+        <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Período</div>
+        <select value={value} onChange={(e) => onChange(e.target.value as Period)} className="bg-transparent text-sm font-medium outline-none cursor-pointer">
+          <option value="today" className="bg-slate-900">Hoje</option>
+          <option value="week" className="bg-slate-900">Semana</option>
+          <option value="month" className="bg-slate-900">Mês</option>
+        </select>
+      </div>
+    </div>
+  );
+}
+
 function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer) => void }) {
   const ActiveIcon = layerConfig[layer].icon;
   return (
@@ -759,9 +1335,9 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
       <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
-          <div className="absolute left-1/2 top-1/2 w-[68%] max-w-[980px] aspect-[3/2] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
+          <div className="absolute left-1/2 top-1/2 w-[68%] max-w-[980px] aspect-[1532/1026] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
-              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1536} height={1024} />
+              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1532} height={1026} />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.032),transparent_55%)] mix-blend-overlay" />
             </div>
@@ -884,7 +1460,7 @@ function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history,
   const data = dashboard || emptyDashboard();
   const series = useMemo(() => buildChartSeries(history, period), [history, period]);
   const heatmapSensors = useMemo(() => buildHeatmapSensors(period, dashboard, history), [period, dashboard, history]);
-  const comfort = Math.max(0, Math.round(((data.expectedSensors - data.kpis.activeAlarms) / data.expectedSensors) * 100));
+  const comfort = data.expectedSensors > 0 ? Math.max(0, Math.round(((data.expectedSensors - data.kpis.activeAlarms) / data.expectedSensors) * 100)) : 0;
   return (
     <>
       <Header period={period} setPeriod={setPeriod} updatedAt={data.updatedAt} alarms={data.kpis.activeAlarms} onNavigate={onNavigate} />
