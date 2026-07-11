@@ -646,7 +646,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
       viewBox="0 0 100 100"
       preserveAspectRatio="none"
       aria-hidden="true"
-      style={{ filter: "saturate(1.25) contrast(1.03)", overflow: "hidden" }}
+      style={{ filter: "saturate(1.44) contrast(1.1) brightness(1.02)", overflow: "hidden" }}
     >
       <defs>
         <filter id="heat-zone-soft-edge" x="-16%" y="-16%" width="132%" height="132%">
@@ -654,11 +654,11 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         </filter>
 
         <filter id="heat-field-soft" x="-12%" y="-12%" width="124%" height="124%">
-          <feGaussianBlur stdDeviation="1.15" />
+          <feGaussianBlur stdDeviation="1.35" />
         </filter>
 
         <filter id="heat-field-bloom" x="-18%" y="-18%" width="136%" height="136%">
-          <feGaussianBlur stdDeviation="2.6" />
+          <feGaussianBlur stdDeviation="3.1" />
         </filter>
 
         {renderZones.map((zone) => {
@@ -679,39 +679,51 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
                 id={`field-${safeId}`}
                 cx={`${pos.x}%`}
                 cy={`${pos.y}%`}
-                r="74%"
+                r="80%"
                 fx={`${pos.x}%`}
                 fy={`${pos.y}%`}
               >
-                <stop offset="0%" stopColor={heatColor(layer, value, 0.58)} />
-                <stop offset="18%" stopColor={heatColor(layer, value, 0.44)} />
-                <stop offset="42%" stopColor={heatColor(layer, value, 0.28)} />
-                <stop offset="72%" stopColor={heatColor(layer, value, 0.13)} />
-                <stop offset="100%" stopColor={heatColor(layer, value, 0.03)} />
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.64)} />
+                <stop offset="20%" stopColor={heatColor(layer, value, 0.50)} />
+                <stop offset="46%" stopColor={heatColor(layer, value, 0.34)} />
+                <stop offset="74%" stopColor={heatColor(layer, value, 0.17)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.04)} />
               </radialGradient>
               <radialGradient
                 id={`field-wide-${safeId}`}
                 cx={`${centroid.x}%`}
                 cy={`${centroid.y}%`}
-                r="92%"
+                r="108%"
                 fx={`${centroid.x}%`}
                 fy={`${centroid.y}%`}
               >
-                <stop offset="0%" stopColor={heatColor(layer, value, 0.24)} />
-                <stop offset="46%" stopColor={heatColor(layer, value, 0.13)} />
-                <stop offset="100%" stopColor={heatColor(layer, value, 0.025)} />
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.28)} />
+                <stop offset="48%" stopColor={heatColor(layer, value, 0.14)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.028)} />
               </radialGradient>
               <radialGradient
                 id={`field-core-${safeId}`}
                 cx={`${pos.x}%`}
                 cy={`${pos.y}%`}
-                r="28%"
+                r="31%"
                 fx={`${pos.x}%`}
                 fy={`${pos.y}%`}
               >
-                <stop offset="0%" stopColor={heatColor(layer, value, 0.52)} />
-                <stop offset="28%" stopColor={heatColor(layer, value, 0.22)} />
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.60)} />
+                <stop offset="30%" stopColor={heatColor(layer, value, 0.30)} />
                 <stop offset="100%" stopColor={heatColor(layer, value, 0)} />
+              </radialGradient>
+              <radialGradient
+                id={`field-rim-${safeId}`}
+                cx={`${centroid.x}%`}
+                cy={`${centroid.y}%`}
+                r="116%"
+                fx={`${centroid.x}%`}
+                fy={`${centroid.y}%`}
+              >
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.10)} />
+                <stop offset="62%" stopColor={heatColor(layer, value, 0.06)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.01)} />
               </radialGradient>
             </Fragment>
           );
@@ -720,7 +732,37 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
 
       {/* As áreas desenhadas servem somente como máscara lógica. Todo o visual
           premium do heatmap permanece restrito às zonas internas da planta. */}
-      <g filter="url(#heat-field-bloom)" style={{ mixBlendMode: "screen" }} opacity="0.34">
+      <g style={{ mixBlendMode: "soft-light" }} opacity="0.16">
+        {renderZones.map((zone) => {
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
+          const safeId = svgSafeId(zone.id);
+          return (
+            <polygon
+              key={`${zone.id}-base-wash`}
+              points={zone.points}
+              fill={`url(#field-rim-${safeId})`}
+            />
+          );
+        })}
+      </g>
+
+      <g style={{ mixBlendMode: "multiply" }} opacity="0.14">
+        {renderZones.map((zone) => {
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
+          const safeId = svgSafeId(zone.id);
+          return (
+            <polygon
+              key={`${zone.id}-depth-zone`}
+              points={zone.points}
+              fill={`url(#field-wide-${safeId})`}
+            />
+          );
+        })}
+      </g>
+
+      <g filter="url(#heat-field-bloom)" style={{ mixBlendMode: "screen" }} opacity="0.30">
         {renderZones.map((zone, index) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
@@ -741,7 +783,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "screen" }} opacity="0.92">
+      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "screen" }} opacity="0.90">
         {renderZones.map((zone, index) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
@@ -762,7 +804,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      <g style={{ mixBlendMode: "soft-light" }} opacity="0.18">
+      <g style={{ mixBlendMode: "overlay" }} opacity="0.18">
         {renderZones.map((zone) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
@@ -777,7 +819,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "color-dodge" }} opacity="0.12">
+      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "color-dodge" }} opacity="0.18">
         {renderZones.map((zone, index) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
@@ -1418,9 +1460,16 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
           <div className="absolute left-1/2 top-1/2 w-[63%] max-w-[920px] aspect-[1532/1026] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
-              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1532} height={1026} />
+              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.05) saturate(1.02) brightness(0.96)" }} width={1532} height={1026} />
+              <div
+                className="absolute inset-0"
+                style={{
+                  background: "radial-gradient(circle at 50% 46%, rgba(10,27,52,0.06) 0%, rgba(5,14,30,0.18) 60%, rgba(2,8,18,0.30) 100%), linear-gradient(180deg, rgba(4,10,22,0.02) 0%, rgba(2,7,16,0.18) 100%)",
+                  mixBlendMode: "multiply",
+                }}
+              />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
-              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.04),transparent_55%)] mix-blend-overlay" />
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.035),transparent_54%),linear-gradient(180deg,rgba(255,255,255,.024),transparent_36%,rgba(0,0,0,.10)_100%)] mix-blend-overlay" />
             </div>
             <div className="absolute inset-0 z-20 pointer-events-none" >
               {visibleSensors.map((s) => {
