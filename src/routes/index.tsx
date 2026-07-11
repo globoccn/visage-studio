@@ -295,12 +295,12 @@ const layerConfig: Record<Layer, { label: string; unit: string; icon: any; stops
 };
 
 const sensorRegistry: Sensor[] = [
-  { dev_eui: "24E124136E312780", sensor_id: "EM300-01", sensor_name: "EM300-01", area: "Área central inferior", floor: "Térreo", x: 58.2, y: 66.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314787", sensor_id: "EM300-02", sensor_name: "EM300-02", area: "Área inferior esquerda", floor: "Térreo", x: 11.8, y: 72.9, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314516", sensor_id: "EM300-03", sensor_name: "EM300-03", area: "Sala direita inferior", floor: "Térreo", x: 93.0, y: 56.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124136E314466", sensor_id: "EM300-04", sensor_name: "EM300-04", area: "Área superior esquerda", floor: "Térreo", x: 35.0, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F478289", sensor_id: "AM103L-08", sensor_name: "AM 103 L - 08", area: "Sala direita superior", floor: "Térreo", x: 90.2, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
-  { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "Mesa central", floor: "Térreo", x: 35.0, y: 44.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E312780", sensor_id: "EM300-01", sensor_name: "EM300-01", area: "PREPARO - Prox. a porta", floor: "Térreo", x: 58.2, y: 66.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314787", sensor_id: "EM300-02", sensor_name: "EM300-02", area: "PREPARO - Passagem material", floor: "Térreo", x: 11.8, y: 72.9, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314516", sensor_id: "EM300-03", sensor_name: "EM300-03", area: "ARSENAL - Inferior", floor: "Térreo", x: 93.0, y: 56.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124136E314466", sensor_id: "EM300-04", sensor_name: "EM300-04", area: "PREPARO - Coordenação", floor: "Térreo", x: 35.0, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F478289", sensor_id: "AM103L-08", sensor_name: "AM 103 L - 08", area: "ARSENAL - Superior", floor: "Térreo", x: 90.2, y: 11.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
+  { dev_eui: "24E124725F458532", sensor_id: "AM103L-15", sensor_name: "AM 103 L - 15", area: "PREPARO - Bancada", floor: "Térreo", x: 35.0, y: 44.0, temperature: null, humidity: null, co2: null, battery: null, rssi: null, snr: null },
 ];
 
 const installedSensorIds = new Set(sensorRegistry.map((sensor) => sensor.sensor_id.toUpperCase()));
