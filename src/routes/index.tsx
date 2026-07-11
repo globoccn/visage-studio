@@ -667,6 +667,7 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
           const value = valueForLayer(sensor, layer);
           if (typeof value !== "number") return null;
           const pos = mapPosition(sensor);
+          const centroid = zoneCentroid(zone);
           const safeId = svgSafeId(zone.id);
           return (
             <Fragment key={`${zone.id}-defs`}>
@@ -678,31 +679,78 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
                 id={`field-${safeId}`}
                 cx={`${pos.x}%`}
                 cy={`${pos.y}%`}
-                r="76%"
+                r="74%"
                 fx={`${pos.x}%`}
                 fy={`${pos.y}%`}
               >
-                <stop offset="0%" stopColor={heatColor(layer, value, 0.62)} />
-                <stop offset="16%" stopColor={heatColor(layer, value, 0.46)} />
-                <stop offset="40%" stopColor={heatColor(layer, value, 0.30)} />
-                <stop offset="70%" stopColor={heatColor(layer, value, 0.15)} />
-                <stop offset="100%" stopColor={heatColor(layer, value, 0.035)} />
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.58)} />
+                <stop offset="18%" stopColor={heatColor(layer, value, 0.44)} />
+                <stop offset="42%" stopColor={heatColor(layer, value, 0.28)} />
+                <stop offset="72%" stopColor={heatColor(layer, value, 0.13)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.03)} />
+              </radialGradient>
+              <radialGradient
+                id={`field-wide-${safeId}`}
+                cx={`${centroid.x}%`}
+                cy={`${centroid.y}%`}
+                r="92%"
+                fx={`${centroid.x}%`}
+                fy={`${centroid.y}%`}
+              >
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.24)} />
+                <stop offset="46%" stopColor={heatColor(layer, value, 0.13)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0.025)} />
+              </radialGradient>
+              <radialGradient
+                id={`field-core-${safeId}`}
+                cx={`${pos.x}%`}
+                cy={`${pos.y}%`}
+                r="28%"
+                fx={`${pos.x}%`}
+                fy={`${pos.y}%`}
+              >
+                <stop offset="0%" stopColor={heatColor(layer, value, 0.52)} />
+                <stop offset="28%" stopColor={heatColor(layer, value, 0.22)} />
+                <stop offset="100%" stopColor={heatColor(layer, value, 0)} />
               </radialGradient>
             </Fragment>
           );
         })}
       </defs>
 
-      {/* As áreas desenhadas servem somente como máscara lógica. As bordas são
-          desfocadas e nunca recebem stroke, evitando quadrados visíveis. */}
-      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "screen" }} opacity="0.94">
-        {renderZones.map((zone) => {
+      {/* As áreas desenhadas servem somente como máscara lógica. Todo o visual
+          premium do heatmap permanece restrito às zonas internas da planta. */}
+      <g filter="url(#heat-field-bloom)" style={{ mixBlendMode: "screen" }} opacity="0.34">
+        {renderZones.map((zone, index) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
           const safeId = svgSafeId(zone.id);
           return (
             <rect
-              key={`${zone.id}-soft-field`}
+              key={`${zone.id}-ambient-zone`}
+              className="heatmap-zone-live"
+              style={{ animationDelay: `${index * 1.1}s` }}
+              x="0"
+              y="0"
+              width="100"
+              height="100"
+              fill={`url(#field-wide-${safeId})`}
+              mask={`url(#mask-${safeId})`}
+            />
+          );
+        })}
+      </g>
+
+      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "screen" }} opacity="0.92">
+        {renderZones.map((zone, index) => {
+          const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
+          if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
+          const safeId = svgSafeId(zone.id);
+          return (
+            <rect
+              key={`${zone.id}-main-field`}
+              className="heatmap-zone-live"
+              style={{ animationDelay: `${0.6 + index * 1.1}s` }}
               x="0"
               y="0"
               width="100"
@@ -714,39 +762,36 @@ function HeatmapAreaOverlay({ sensors, layer }: { sensors: Sensor[]; layer: Laye
         })}
       </g>
 
-      {/* Integração muito suave com a textura do piso, sem revelar os polígonos. */}
-      <g filter="url(#heat-field-bloom)" style={{ mixBlendMode: "soft-light" }} opacity="0.28">
+      <g style={{ mixBlendMode: "soft-light" }} opacity="0.18">
         {renderZones.map((zone) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
           const safeId = svgSafeId(zone.id);
           return (
-            <rect
-              key={`${zone.id}-floor-blend`}
-              x="0"
-              y="0"
-              width="100"
-              height="100"
-              fill={`url(#field-${safeId})`}
-              mask={`url(#mask-${safeId})`}
+            <polygon
+              key={`${zone.id}-zone-fill`}
+              points={zone.points}
+              fill={`url(#field-wide-${safeId})`}
             />
           );
         })}
       </g>
 
-      <g style={{ mixBlendMode: "color-dodge" }} opacity="0.10">
-        {renderZones.map((zone) => {
+      <g filter="url(#heat-field-soft)" style={{ mixBlendMode: "color-dodge" }} opacity="0.12">
+        {renderZones.map((zone, index) => {
           const sensor = sensors.find((item) => zone.sensors.includes(item.sensor_id));
           if (!sensor || typeof valueForLayer(sensor, layer) !== "number") return null;
           const safeId = svgSafeId(zone.id);
           return (
             <rect
-              key={`${zone.id}-vivid-glow`}
+              key={`${zone.id}-core-glow`}
+              className="heatmap-core-live"
+              style={{ animationDelay: `${index * 0.9}s` }}
               x="0"
               y="0"
               width="100"
               height="100"
-              fill={`url(#field-${safeId})`}
+              fill={`url(#field-core-${safeId})`}
               mask={`url(#mask-${safeId})`}
             />
           );
@@ -1374,24 +1419,6 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
           <div className="absolute left-1/2 top-1/2 w-[63%] max-w-[920px] aspect-[1532/1026] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
               <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.08) saturate(1.06) brightness(1.02)" }} width={1532} height={1026} />
-              <div
-                className="absolute inset-0 heatmap-breathe"
-                style={{
-                  backgroundImage: heatmapBackground(activeSensors, layer),
-                  filter: "blur(14px) saturate(1.22)",
-                  mixBlendMode: "screen",
-                  opacity: 0.64,
-                }}
-              />
-              <div
-                className="absolute inset-0 heatmap-drift"
-                style={{
-                  backgroundImage: heatmapBackground(activeSensors, layer),
-                  filter: "blur(24px) saturate(1.34)",
-                  mixBlendMode: "soft-light",
-                  opacity: 0.24,
-                }}
-              />
               <HeatmapAreaOverlay sensors={activeSensors} layer={layer} />
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_52%,rgba(255,255,255,.04),transparent_55%)] mix-blend-overlay" />
             </div>
