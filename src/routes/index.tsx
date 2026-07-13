@@ -1367,7 +1367,7 @@ function KpiCard({ label, value, unit, delta, deltaTone, color, seed, critical }
 
 function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
   return (
-    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm transition-all ${active ? "bg-gradient-to-r from-primary/30 to-primary/5 text-white border border-primary/40 shadow-[0_0_20px_-6px_oklch(0.70_0.18_250/0.6)]" : "text-muted-foreground hover:text-foreground hover:bg-white/5"}`}>
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-3.5 py-2 rounded-xl text-sm transition-all ${active ? "bg-gradient-to-r from-primary/25 to-primary/5 text-primary dark:text-white border border-primary/40 shadow-[0_0_20px_-6px_oklch(0.70_0.18_250/0.45)]" : "text-foreground/70 hover:text-foreground hover:bg-primary/5"}`}>
       <Icon className="h-4 w-4 shrink-0" />
       <span className="truncate">{label}</span>
     </button>
@@ -1389,7 +1389,7 @@ function MobileNavigation({ view, setView, canAccessSettings }: { view: View; se
     <nav className="mobile-navigation lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-sidebar-border bg-sidebar/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
       <div className="flex overflow-x-auto px-2 py-1.5 gap-1 scrollbar-none">
         {items.map(({ view: itemView, label, icon: Icon }) => (
-          <button key={itemView} onClick={() => setView(itemView)} aria-current={view === itemView ? "page" : undefined} className={`min-w-[70px] flex-1 rounded-xl px-2 py-2 flex flex-col items-center gap-1 text-[10px] transition-colors ${view === itemView ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground hover:text-foreground"}`}>
+          <button key={itemView} onClick={() => setView(itemView)} aria-current={view === itemView ? "page" : undefined} className={`min-w-[70px] flex-1 rounded-xl px-2 py-2 flex flex-col items-center gap-1 text-[10px] transition-colors ${view === itemView ? "bg-primary/15 text-primary border border-primary/35" : "text-foreground/70 hover:text-foreground hover:bg-primary/5"}`}>
             <Icon className="h-4 w-4" />
             <span>{label}</span>
           </button>
@@ -1436,9 +1436,9 @@ function PeriodSelect({ value, onChange }: { value: Period; onChange: (p: Period
       <div>
         <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Período</div>
         <select value={value} onChange={(e) => onChange(e.target.value as Period)} className="bg-transparent text-sm font-medium outline-none cursor-pointer">
-          <option value="today" className="bg-slate-900">Hoje</option>
-          <option value="week" className="bg-slate-900">Semana</option>
-          <option value="month" className="bg-slate-900">Mês</option>
+          <option value="today" className="bg-popover text-popover-foreground">Hoje</option>
+          <option value="week" className="bg-popover text-popover-foreground">Semana</option>
+          <option value="month" className="bg-popover text-popover-foreground">Mês</option>
         </select>
       </div>
     </div>
@@ -1454,9 +1454,9 @@ function LayerSelector({ layer, onChange }: { layer: Layer; onChange: (l: Layer)
         <div className="flex-1">
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Camada ativa</div>
           <select value={layer} onChange={(e) => onChange(e.target.value as Layer)} className="text-sm font-medium bg-transparent outline-none cursor-pointer w-full">
-            <option value="temperature" className="bg-slate-900">Temperatura</option>
-            <option value="humidity" className="bg-slate-900">Umidade</option>
-            <option value="co2" className="bg-slate-900">CO₂</option>
+            <option value="temperature" className="bg-popover text-popover-foreground">Temperatura</option>
+            <option value="humidity" className="bg-popover text-popover-foreground">Umidade</option>
+            <option value="co2" className="bg-popover text-popover-foreground">CO₂</option>
           </select>
         </div>
       </div>
@@ -1482,14 +1482,14 @@ function DigitalTwinMap({ sensors, layer, period, onLayerChange, onSelectSensor 
   return (
     <div className="dashboard-map glass-strong rounded-2xl p-2 relative overflow-hidden h-full min-h-0">
       <div className="absolute right-4 top-3 z-30 text-xs text-muted-foreground glass rounded-xl px-3 py-1.5">Heatmap por {periodLabel[period].toLowerCase()} • {layerConfig[layer].label}</div>
-      <div className="relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
+      <div className="floorplan-canvas relative rounded-xl overflow-hidden border border-white/10 bg-[radial-gradient(circle_at_50%_45%,rgba(14,165,233,.13),transparent_48%),linear-gradient(135deg,#020617,#071426_55%,#020617)] h-full min-h-0">
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_52%_52%,rgba(56,189,248,.09),transparent_46%)]" />
         <div className="floorplan-stage absolute inset-0 overflow-hidden">
           <div className="absolute left-1/2 top-1/2 w-[63%] max-w-[920px] aspect-[1532/1026] origin-center drop-shadow-[0_34px_90px_rgba(0,0,0,.72)]" style={{ transform: "translate(-50%, -50%)" }}>
             <div className="absolute inset-0 overflow-hidden rounded-[10px]" >
-              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.05) saturate(1.02) brightness(0.96)" }} width={1532} height={1026} />
+              <img src={floorPlan} alt="Planta 3D termográfica Fleury" className="floorplan-image absolute inset-0 w-full h-full object-contain object-center select-none" style={{ filter: "contrast(1.05) saturate(1.02) brightness(0.96)" }} width={1532} height={1026} />
               <div
-                className="absolute inset-0"
+                className="floorplan-dark-overlay absolute inset-0"
                 style={{
                   background: "radial-gradient(circle at 50% 46%, rgba(10,27,52,0.06) 0%, rgba(5,14,30,0.18) 60%, rgba(2,8,18,0.30) 100%), linear-gradient(180deg, rgba(4,10,22,0.02) 0%, rgba(2,7,16,0.18) 100%)",
                   mixBlendMode: "multiply",
@@ -2419,6 +2419,9 @@ function ReportsView() {
 
 function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sensors: Sensor[]; initialSettings: AlarmSettings; onSettingsSaved: (settings: AlarmSettings) => void; auth: AuthState }) {
   const [settings, setSettings] = useState<AlarmSettings>(initialSettings);
+  const [numericDrafts, setNumericDrafts] = useState<Record<keyof AlarmSettings, string>>(() =>
+    Object.fromEntries(Object.entries(initialSettings).map(([key, value]) => [key, String(value)])) as Record<keyof AlarmSettings, string>,
+  );
   const [status, setStatus] = useState<string>("");
   const [users, setUsers] = useState<FleuryUser[]>([]);
   const [usersStatus, setUsersStatus] = useState<string>("");
@@ -2427,7 +2430,11 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
 
   useEffect(() => {
     fetchJSON<any>(`${N8N_BASE}/fleury-settings`)
-      .then((payload) => setSettings(normalizeSettings(payload)))
+      .then((payload) => {
+        const loaded = normalizeSettings(payload);
+        setSettings(loaded);
+        setNumericDrafts(Object.fromEntries(Object.entries(loaded).map(([key, value]) => [key, String(value)])) as Record<keyof AlarmSettings, string>);
+      })
       .catch(() => setStatus("Não foi possível carregar os limites atuais."));
   }, []);
 
@@ -2445,19 +2452,54 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
 
   useEffect(() => { loadUsers(); }, []);
 
-  const update = (key: keyof typeof settings, value: string) => {
-    setSettings((prev) => ({ ...prev, [key]: Number(value) }));
+  const updateDraft = (key: keyof AlarmSettings, value: string) => {
+    const normalized = value.replace(",", ".");
+    if (/^-?\d*(?:\.\d*)?$/.test(normalized)) {
+      setNumericDrafts((prev) => ({ ...prev, [key]: normalized }));
+      setStatus("");
+    }
+  };
+
+  const commitDraft = (key: keyof AlarmSettings) => {
+    const parsed = Number(numericDrafts[key]);
+    if (!Number.isFinite(parsed)) {
+      setNumericDrafts((prev) => ({ ...prev, [key]: String(settings[key]) }));
+      return settings[key];
+    }
+    setSettings((prev) => ({ ...prev, [key]: parsed }));
+    setNumericDrafts((prev) => ({ ...prev, [key]: String(parsed) }));
+    return parsed;
+  };
+
+  const settingsFromDrafts = (): AlarmSettings | null => {
+    const next = {} as AlarmSettings;
+    for (const key of Object.keys(settings) as (keyof AlarmSettings)[]) {
+      const parsed = Number(numericDrafts[key]);
+      if (!Number.isFinite(parsed)) return null;
+      next[key] = parsed;
+    }
+    return next;
   };
 
   const save = async () => {
+    const validatedSettings = settingsFromDrafts();
+    if (!validatedSettings) {
+      setStatus("Revise os campos numéricos antes de salvar.");
+      return;
+    }
+    if (validatedSettings.temperature_low >= validatedSettings.temperature_high || validatedSettings.humidity_low >= validatedSettings.humidity_high) {
+      setStatus("Os limites mínimos devem ser menores que os limites máximos.");
+      return;
+    }
     setStatus("Salvando...");
+    setSettings(validatedSettings);
     try {
       const payloadToSave = {
-        temperature_low: settings.temperature_low,
-        temperature_high: settings.temperature_high,
-        humidity_low: settings.humidity_low,
-        humidity_high: settings.humidity_high,
-        co2_high: settings.co2_high,
+        temperature_low: validatedSettings.temperature_low,
+        temperature_high: validatedSettings.temperature_high,
+        humidity_low: validatedSettings.humidity_low,
+        humidity_high: validatedSettings.humidity_high,
+        co2_high: validatedSettings.co2_high,
       };
       const res = await fetch(`${N8N_BASE}/fleury-settings`, {
         method: "POST",
@@ -2466,9 +2508,10 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const payload = await parseResponseJSON<any>(res, "Salvar configurações").catch(() => null);
-      const savedSettings = payload ? normalizeSettings(payload) : settings;
+      const savedSettings = payload ? normalizeSettings(payload) : validatedSettings;
       onSettingsSaved(savedSettings);
       setSettings(savedSettings);
+      setNumericDrafts(Object.fromEntries(Object.entries(savedSettings).map(([key, value]) => [key, String(value)])) as Record<keyof AlarmSettings, string>);
       setStatus("Limites ambientais salvos com sucesso.");
     } catch {
       setStatus("Não foi possível salvar agora. Tente novamente em instantes.");
@@ -2523,7 +2566,16 @@ function SettingsView({ sensors, initialSettings, onSettingsSaved, auth }: { sen
     <label className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
       <div className="text-xs text-muted-foreground mb-1">{label}</div>
       <div className="flex items-center gap-2">
-        <input className="w-full bg-transparent border border-white/10 rounded-lg px-2 py-1 text-lg font-semibold outline-none focus:border-info/50" type="number" step="0.1" value={settings[k]} onChange={(e) => update(k, e.target.value)} />
+        <input
+          className="numeric-setting-input w-full bg-transparent border border-white/10 rounded-lg px-2 py-1 text-lg font-semibold outline-none focus:border-info/50"
+          type="text"
+          inputMode="decimal"
+          value={numericDrafts[k]}
+          onChange={(e) => updateDraft(k, e.target.value)}
+          onBlur={() => commitDraft(k)}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+          aria-label={label}
+        />
         <span className="text-xs text-muted-foreground">{unit}</span>
       </div>
     </label>
