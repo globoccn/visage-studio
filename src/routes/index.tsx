@@ -32,6 +32,8 @@ import {
   Users,
   Lock,
   Eye,
+  Sun,
+  Moon,
 } from "lucide-react";
 import {
   AreaChart,
@@ -1372,6 +1374,31 @@ function SidebarItem({ icon: Icon, label, active, onClick }: { icon: any; label:
   );
 }
 
+function MobileNavigation({ view, setView, canAccessSettings }: { view: View; setView: (view: View) => void; canAccessSettings: boolean }) {
+  const items = [
+    { view: "dashboard" as View, label: "Dashboard", icon: LayoutDashboard },
+    { view: "sensors" as View, label: "Sensores", icon: Radio },
+    { view: "history" as View, label: "Histórico", icon: History },
+    { view: "alarms" as View, label: "Alarmes", icon: Bell },
+    { view: "insights" as View, label: "Insights", icon: Brain },
+    { view: "reports" as View, label: "Relatórios", icon: FileText },
+    ...(canAccessSettings ? [{ view: "settings" as View, label: "Ajustes", icon: Settings }] : []),
+  ];
+
+  return (
+    <nav className="mobile-navigation lg:hidden fixed bottom-0 inset-x-0 z-50 border-t border-sidebar-border bg-sidebar/95 backdrop-blur-xl pb-[env(safe-area-inset-bottom)]">
+      <div className="flex overflow-x-auto px-2 py-1.5 gap-1 scrollbar-none">
+        {items.map(({ view: itemView, label, icon: Icon }) => (
+          <button key={itemView} onClick={() => setView(itemView)} aria-current={view === itemView ? "page" : undefined} className={`min-w-[70px] flex-1 rounded-xl px-2 py-2 flex flex-col items-center gap-1 text-[10px] transition-colors ${view === itemView ? "bg-primary/20 text-primary border border-primary/30" : "text-muted-foreground hover:text-foreground"}`}>
+            <Icon className="h-4 w-4" />
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 function SensorMapBadge({ sensor, layer, onClick }: { sensor: Sensor; layer: Layer; onClick?: () => void }) {
   const disabledLayer = layer === "co2" && isEm300Sensor(sensor);
   const mainValue = disabledLayer ? null : valueForLayer(sensor, layer);
@@ -1586,14 +1613,14 @@ function SensorDetail({ sensor, history, period }: { sensor: Sensor | null; hist
   );
 }
 
-function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history, selectedSensor, setSelectedSensor, onNavigate, settings }: { period: Period; setPeriod: (p: Period) => void; layer: Layer; setLayer: (l: Layer) => void; dashboard: DashboardPayload | null; history: HistoryPayload | null; selectedSensor: Sensor | null; setSelectedSensor: (s: Sensor) => void; onNavigate: (view: View) => void; settings: AlarmSettings }) {
+function DashboardHome({ period, setPeriod, layer, setLayer, dashboard, history, selectedSensor, setSelectedSensor, onNavigate, settings, theme, onToggleTheme }: { period: Period; setPeriod: (p: Period) => void; layer: Layer; setLayer: (l: Layer) => void; dashboard: DashboardPayload | null; history: HistoryPayload | null; selectedSensor: Sensor | null; setSelectedSensor: (s: Sensor) => void; onNavigate: (view: View) => void; settings: AlarmSettings; theme: "dark" | "light"; onToggleTheme: () => void }) {
   const data = dashboard || emptyDashboard();
   const series = useMemo(() => buildChartSeries(history, period), [history, period]);
   const heatmapSensors = useMemo(() => buildHeatmapSensors(period, dashboard, history), [period, dashboard, history]);
   const comfort = data.expectedSensors > 0 ? Math.max(0, Math.round(((data.expectedSensors - data.kpis.activeAlarms) / data.expectedSensors) * 100)) : 0;
   return (
     <>
-      <Header period={period} setPeriod={setPeriod} updatedAt={data.updatedAt} alarms={data.kpis.activeAlarms} onNavigate={onNavigate} />
+      <Header period={period} setPeriod={setPeriod} updatedAt={data.updatedAt} alarms={data.kpis.activeAlarms} onNavigate={onNavigate} theme={theme} onToggleTheme={onToggleTheme} />
       <section className="dashboard-kpis grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-2 shrink-0 relative z-10">
         <KpiCard label="Temp. média" value={formatDecimal(data.kpis.temperatureAvg)} unit="°C" delta={`${periodLabel[period]} operacional`} deltaTone="up" color="#60a5fa" seed={1} />
         <KpiCard label="Temp. mín." value={formatDecimal(data.kpis.temperatureMin)} unit="°C" delta="Limite frio 21,5 °C" deltaTone="down" color="#22d3ee" seed={2} />
@@ -1625,14 +1652,14 @@ function useClientClock() {
   return now;
 }
 
-function Header({ period, setPeriod, updatedAt, alarms, onNavigate }: { period: Period; setPeriod: (p: Period) => void; updatedAt?: string; alarms: number; onNavigate?: (view: View) => void }) {
+function Header({ period, setPeriod, updatedAt, alarms, onNavigate, theme = "dark", onToggleTheme }: { period: Period; setPeriod: (p: Period) => void; updatedAt?: string; alarms: number; onNavigate?: (view: View) => void; theme?: "dark" | "light"; onToggleTheme?: () => void }) {
   const now = useClientClock();
 
   return (
     <header className="grid grid-cols-1 md:grid-cols-[auto_1fr_auto] items-center gap-2.5 shrink-0 relative z-20">
       <div className="glass rounded-2xl px-3 py-2 flex items-center gap-2.5 text-sm"><span>{formatDatePt(now)}</span><Clock className="h-4 w-4 text-muted-foreground" /><span className="font-medium">{formatTimePt(now)}</span></div>
       <div className="glass rounded-2xl px-4 py-2 flex items-center gap-2.5 justify-center"><span className="relative flex h-2.5 w-2.5"><span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" /><span className="relative rounded-full h-2.5 w-2.5 bg-success" /></span><div className="text-sm"><span className="text-muted-foreground">Status geral </span><span className="font-semibold text-success">Operacional</span><span className="text-muted-foreground ml-3">Atualizado {formatTimePt(updatedAt)}</span></div></div>
-      <div className="flex items-center gap-3"><PeriodSelect value={period} onChange={setPeriod} /><button onClick={() => onNavigate?.("alarms")} title="Ver alarmes" className="glass rounded-2xl p-2 relative hover:border-critical/50 transition-colors"><Bell className="h-5 w-5" />{alarms > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-critical text-[10px] font-bold grid place-items-center">{alarms}</span>}</button></div>
+      <div className="flex items-center gap-2"><PeriodSelect value={period} onChange={setPeriod} />{onToggleTheme && <button onClick={onToggleTheme} title={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} aria-label={theme === "dark" ? "Ativar tema claro" : "Ativar tema escuro"} className="glass rounded-2xl p-2 hover:border-primary/50 transition-colors">{theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}</button>}<button onClick={() => onNavigate?.("alarms")} title="Ver alarmes" className="glass rounded-2xl p-2 relative hover:border-critical/50 transition-colors"><Bell className="h-5 w-5" />{alarms > 0 && <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-critical text-[10px] font-bold grid place-items-center">{alarms}</span>}</button></div>
     </header>
   );
 }
@@ -1803,11 +1830,27 @@ function App() {
   const [selectedSensor, setSelectedSensor] = useState<Sensor | null>(null);
   const [settings, setSettings] = useState<AlarmSettings>(DEFAULT_ALARM_SETTINGS);
   const [apiState, setApiState] = useState<ApiState>({ loading: true, error: null });
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   useEffect(() => {
     setAuth(readStoredAuth());
+    const storedTheme = window.localStorage.getItem("fleury_theme");
+    const nextTheme = storedTheme === "light" ? "light" : "dark";
+    setTheme(nextTheme);
+    document.documentElement.classList.toggle("light", nextTheme === "light");
+    document.documentElement.classList.toggle("dark", nextTheme === "dark");
     setAuthChecked(true);
   }, []);
+
+  const toggleTheme = () => {
+    setTheme((current) => {
+      const next = current === "dark" ? "light" : "dark";
+      window.localStorage.setItem("fleury_theme", next);
+      document.documentElement.classList.toggle("light", next === "light");
+      document.documentElement.classList.toggle("dark", next === "dark");
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (authChecked && auth?.user?.role !== "admin" && view === "settings") setView("dashboard");
@@ -1896,7 +1939,7 @@ function App() {
   const activeDashboard = dashboard || emptyDashboard();
 
   return (
-    <div className="h-screen w-full flex overflow-hidden text-foreground">
+    <div className="min-h-screen lg:h-screen w-full flex overflow-x-hidden lg:overflow-hidden text-foreground">
       <aside className="hidden lg:flex h-screen w-[220px] shrink-0 flex-col gap-4 px-4 py-4 border-r border-sidebar-border bg-sidebar/60 backdrop-blur-xl overflow-hidden">
         <div className="px-2"><div className="text-2xl font-black tracking-tight">FLEURY</div><div className="text-[9px] tracking-[0.25em] text-muted-foreground mt-0.5">MEDICINA E SAÚDE</div></div>
         <nav className="flex flex-col gap-0.5">
@@ -1915,9 +1958,9 @@ function App() {
           <div className="glass rounded-2xl p-3 flex items-center gap-3"><div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-info grid place-items-center shrink-0"><User className="h-4 w-4" /></div><div className="min-w-0 flex-1"><div className="text-xs font-medium truncate">{currentUser.name}</div><div className="text-[10px] text-muted-foreground truncate">{currentUser.role === "admin" ? "Administrador" : "Operacional"}</div></div><button onClick={handleLogout} className="text-muted-foreground hover:text-foreground" title="Sair"><LogOut className="h-4 w-4" /></button></div>
         </div>
       </aside>
-      <main className="supervisor-main flex-1 min-w-0 h-screen overflow-hidden p-3 2xl:p-4 flex flex-col gap-3">
+      <main className="supervisor-main flex-1 min-w-0 min-h-screen lg:h-screen overflow-y-auto lg:overflow-hidden p-2.5 sm:p-3 2xl:p-4 pb-24 lg:pb-4 flex flex-col gap-3">
         {apiState.error && <div className="rounded-xl border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">{apiState.error}</div>}
-        {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} settings={settings} />}
+        {view === "dashboard" && <DashboardHome period={period} setPeriod={setPeriod} layer={layer} setLayer={setLayer} dashboard={dashboard} history={history} selectedSensor={selectedSensor} setSelectedSensor={setSelectedSensor} onNavigate={setView} settings={settings} theme={theme} onToggleTheme={toggleTheme} />}
         {view === "sensors" && <SensorsView sensors={activeDashboard.sensors} history={history} />}
         {view === "history" && <HistoryView period={period} setPeriod={setPeriod} history={history} />}
         {view === "alarms" && <AlarmsView alarms={activeDashboard.alarms} sensors={activeDashboard.sensors} settings={settings} />}
@@ -1925,6 +1968,7 @@ function App() {
         {view === "reports" && <ReportsView />}
         {view === "settings" && canAccessSettings && <SettingsView sensors={activeDashboard.sensors} initialSettings={settings} onSettingsSaved={setSettings} auth={auth} />}
       </main>
+      <MobileNavigation view={view} setView={setView} canAccessSettings={canAccessSettings} />
     </div>
   );
 }

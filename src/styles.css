@@ -201,3 +201,62 @@
     }
   }
 }
+
+.light {
+  color-scheme: light;
+  --background: oklch(0.97 0.008 250);
+  --foreground: oklch(0.20 0.035 258);
+  --card: oklch(1 0 0 / 0.82);
+  --card-foreground: oklch(0.20 0.035 258);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.20 0.035 258);
+  --primary: oklch(0.56 0.19 250);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.93 0.015 252);
+  --secondary-foreground: oklch(0.24 0.035 258);
+  --muted: oklch(0.93 0.012 252);
+  --muted-foreground: oklch(0.48 0.035 252);
+  --accent: oklch(0.90 0.035 250);
+  --accent-foreground: oklch(0.22 0.04 258);
+  --border: oklch(0.78 0.025 252 / 0.7);
+  --input: oklch(0.78 0.025 252 / 0.7);
+  --ring: oklch(0.56 0.19 250);
+  --sidebar: oklch(0.99 0.006 250);
+  --sidebar-foreground: oklch(0.24 0.035 258);
+  --sidebar-border: oklch(0.82 0.02 252 / 0.8);
+}
+
+.light body {
+  background:
+    radial-gradient(1200px 600px at 80% -10%, oklch(0.82 0.08 250 / 0.28), transparent 60%),
+    radial-gradient(900px 500px at -10% 100%, oklch(0.86 0.07 235 / 0.24), transparent 60%),
+    var(--color-background);
+}
+
+.light .glass,
+.light .glass-strong {
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.88), oklch(0.96 0.012 250 / 0.82));
+  border-color: oklch(0.72 0.035 252 / 0.42);
+  box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.9), 0 12px 32px -20px oklch(0.30 0.05 255 / 0.35);
+}
+
+.light [class*="border-white/"] { border-color: oklch(0.72 0.025 252 / 0.38); }
+.light [class*="bg-white/"] { background-color: oklch(0.88 0.018 250 / 0.42); }
+
+@media (max-width: 1023px) {
+  .supervisor-main > header { position: relative; }
+  .dashboard-main-grid,
+  .dashboard-charts { height: auto; }
+  .dashboard-map { min-height: 420px; }
+  .dashboard-sensor-detail { min-height: 620px; }
+  .dashboard-charts .glass-strong { min-height: 170px; }
+  .dashboard-alerts { min-height: 180px; }
+}
+
+@media (max-width: 640px) {
+  .dashboard-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-map { min-height: 360px; }
+  .dashboard-sensor-detail { min-height: 580px; }
+  .supervisor-main .glass,
+  .supervisor-main .glass-strong { border-radius: 0.875rem; }
+}
