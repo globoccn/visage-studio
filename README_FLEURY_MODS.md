@@ -1,6 +1,6 @@
 # Alterações manuais - Fleury Supervisório Ambiental
 
-Este ZIP foi ajustado manualmente a partir da versão Lovable.
+Este ZIP foi ajustado manualmente para o Supervisório Ambiental Fleury.
 
 ## Home / Dashboard
 - Botão de período configurado: Hoje, Semana, Mês.
