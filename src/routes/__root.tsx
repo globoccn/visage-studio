@@ -78,25 +78,56 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Supervisório ambiental para monitoramento de temperatura, umidade e CO₂.",
       },
       { name: "author", content: "CCN Automação" },
+      { name: "theme-color", content: "#0f2747" },
+      { name: "robots", content: "index, follow" },
       { property: "og:title", content: "Fleury — Supervisório Ambiental" },
       {
         property: "og:description",
         content: "Monitoramento de temperatura, umidade e CO₂ em tempo real.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:url", content: "https://fleury-bh.2see.io/" },
       { property: "og:locale", content: "pt_BR" },
       { property: "og:site_name", content: "Fleury — Supervisório Ambiental" },
-      { name: "twitter:card", content: "summary" },
+      {
+        property: "og:image",
+        content: "https://fleury-bh.2see.io/og-fleury-v2.png",
+      },
+      {
+        property: "og:image:secure_url",
+        content: "https://fleury-bh.2see.io/og-fleury-v2.png",
+      },
+      { property: "og:image:type", content: "image/png" },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      {
+        property: "og:image:alt",
+        content: "Fleury — Supervisório Ambiental",
+      },
+      { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Fleury — Supervisório Ambiental" },
       {
         name: "twitter:description",
         content: "Monitoramento de temperatura, umidade e CO₂ em tempo real.",
+      },
+      {
+        name: "twitter:image",
+        content: "https://fleury-bh.2see.io/og-fleury-v2.png",
       },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
+      },
+      {
+        rel: "canonical",
+        href: "https://fleury-bh.2see.io/",
+      },
+      {
+        rel: "icon",
+        type: "image/svg+xml",
+        href: "/favicon.svg",
       },
     ],
   }),

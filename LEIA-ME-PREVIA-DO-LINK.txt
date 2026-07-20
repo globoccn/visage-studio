@@ -1,0 +1,11 @@
+PUBLICAÇÃO E PRÉVIA DO LINK
+
+1. Publique esta versão no mesmo domínio: https://fleury-bh.2see.io/
+2. Confirme que o código-fonte da página publicada contém:
+   - og:title = Fleury — Supervisório Ambiental
+   - og:description = Monitoramento de temperatura, umidade e CO₂ em tempo real.
+   - og:image = https://fleury-bh.2see.io/og-fleury-v2.png
+3. Após a publicação, teste primeiro o endereço com um parâmetro novo:
+   https://fleury-bh.2see.io/?preview=v2
+   Isso cria uma URL diferente para a prévia antiga não ser reutilizada.
+4. Quando a nova prévia aparecer, o endereço normal poderá ser usado novamente após a atualização do cache da plataforma.
